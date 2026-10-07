@@ -430,11 +430,11 @@ src/__tests__/
 
 ---
 
-## Nyitott kérdések (döntés szükséges)
+## Döntések (lezárva 2026-10-07)
 
-1. **Pre-seeded dokumentációk**: Melyik library dokumentációját indexeljük be alapból demóként? Javaslat: Tailwind CSS + React + TypeScript (mindhárom jól scrape-elhető, közel van a célközönséghez). Vagy más preferencia?
+1. **Pre-seeded dokumentációk**: Tailwind CSS + React + TypeScript docs. Demó adatként ezek kerülnek be alapból az indexelésbe.
 
-2. **Session source selection UX**: Session létrehozásakor kiválasztható legyen melyik forrás(ok)ból keresünk? Vagy az összes forrást mindig átkutatja? Az összes egyszerűbb, de több forrás esetén relevánsabb eredményt ad a szűrés.
+2. **Session source selection**: Session indításakor kiválasztható melyik forrás(ok)ból keressen a rendszer. A `sessions.source_ids` tömb tartalmazza a kiválasztott forrásokat; üres tömb = nincs szűrés (összes forrás).
 
 ---
 
