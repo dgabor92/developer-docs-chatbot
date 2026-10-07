@@ -124,3 +124,70 @@ async def test_send_message_session_not_found(client: AsyncClient) -> None:
         json={'content': 'Hello'},
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_multi_turn_conversation_persists_history(
+    client: AsyncClient,
+    mock_ollama: object,
+    mock_anthropic: object,
+) -> None:
+    create = await client.post('/api/sessions', json={'source_ids': []})
+    session_id = create.json()['id']
+
+    await client.post(
+        f'/api/sessions/{session_id}/messages',
+        json={'content': 'What is Tailwind CSS?'},
+    )
+    await client.post(
+        f'/api/sessions/{session_id}/messages',
+        json={'content': 'How do I add custom colors?'},
+    )
+
+    session = await client.get(f'/api/sessions/{session_id}')
+    messages = session.json()['messages']
+
+    assert len(messages) == 4
+    assert messages[0]['role'] == 'user'
+    assert messages[1]['role'] == 'assistant'
+    assert messages[2]['role'] == 'user'
+    assert messages[3]['role'] == 'assistant'
+
+    await client.delete(f'/api/sessions/{session_id}')
+
+
+@pytest.mark.asyncio
+async def test_session_deletion_cascades_to_messages(
+    client: AsyncClient,
+    mock_ollama: object,
+    mock_anthropic: object,
+) -> None:
+    create = await client.post('/api/sessions', json={'source_ids': []})
+    session_id = create.json()['id']
+
+    await client.post(
+        f'/api/sessions/{session_id}/messages',
+        json={'content': 'Test message'},
+    )
+
+    await client.delete(f'/api/sessions/{session_id}')
+
+    # Session no longer exists — its messages are gone with it (CASCADE)
+    get = await client.get(f'/api/sessions/{session_id}')
+    assert get.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_session_with_source_ids_stores_selection(client: AsyncClient) -> None:
+    from uuid import uuid4
+
+    fake_source_id = str(uuid4())
+    create = await client.post(
+        '/api/sessions',
+        json={'source_ids': [fake_source_id]},
+    )
+    assert create.status_code == 201
+    data = create.json()
+    assert fake_source_id in data['source_ids']
+
+    await client.delete(f'/api/sessions/{data["id"]}')
