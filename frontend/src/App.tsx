@@ -1,84 +1,121 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import type { Session } from './types/session'
+import { createSession, deleteSession, listSessions } from './api/sessions'
+import { SessionSidebar } from './components/SessionSidebar'
+import { ChatWindow } from './components/ChatWindow'
+import { SourcesPanel } from './components/SourcesPanel'
 
-interface HealthStatus {
-  status: string
-  database: string
-  ollama: string
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const isOk = status === 'ok'
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        isOk ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-      }`}
-    >
-      {status}
-    </span>
-  )
-}
-
-function StatusRow({ label, status }: { label: string; status: string }) {
-  return (
-    <div className='flex items-center justify-between py-2'>
-      <span className='text-sm text-gray-600'>{label}</span>
-      <StatusBadge status={status} />
-    </div>
-  )
-}
+type View = 'chat' | 'sources'
 
 export default function App() {
-  const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [view, setView] = useState<View>('chat')
 
-  useEffect(() => {
-    fetch('/api/health')
-      .then(res => {
-        if (!res.ok) throw new Error('API returned non-OK status')
-        return res.json() as Promise<HealthStatus>
-      })
-      .then(data => setHealth(data))
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
+  const loadSessions = useCallback(() => {
+    listSessions().then(data => {
+      setSessions(data)
+      setSessionsLoading(false)
+    })
   }, [])
 
+  useEffect(() => {
+    loadSessions()
+  }, [loadSessions])
+
+  async function handleNewSession() {
+    const session = await createSession([])
+    setSessions(prev => [session, ...prev])
+    setSelectedId(session.id)
+    setView('chat')
+  }
+
+  async function handleDeleteSession(id: string) {
+    await deleteSession(id)
+    setSessions(prev => prev.filter(s => s.id !== id))
+    if (selectedId === id) setSelectedId(null)
+  }
+
+  function handleSelectSession(id: string) {
+    setSelectedId(id)
+    setView('chat')
+  }
+
+  function handleSessionCreatedFromSources(session: Session) {
+    setSessions(prev => [session, ...prev])
+    setSelectedId(session.id)
+    setView('chat')
+  }
+
   return (
-    <div className='min-h-screen bg-gray-50'>
-      <div className='mx-auto max-w-2xl px-4 py-16'>
-        <div className='mb-8'>
-          <h1 className='text-3xl font-bold tracking-tight text-gray-900'>
-            Developer Docs Chatbot
-          </h1>
-          <p className='mt-2 text-gray-500'>RAG-powered documentation assistant</p>
-        </div>
+    <div className='flex h-screen overflow-hidden bg-white font-sans'>
+      <SessionSidebar
+        sessions={sessions}
+        selectedId={selectedId}
+        onSelect={handleSelectSession}
+        onNew={handleNewSession}
+        onDelete={handleDeleteSession}
+        loading={sessionsLoading}
+      />
 
-        <div className='rounded-lg border border-gray-200 bg-white p-6 shadow-sm'>
-          <h2 className='text-sm font-semibold uppercase tracking-wide text-gray-500'>
-            System Status
-          </h2>
+      <div className='flex flex-1 flex-col overflow-hidden'>
+        <header className='flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3'>
+          <div>
+            <h1 className='text-sm font-semibold text-gray-900'>Developer Docs Chatbot</h1>
+            <p className='text-xs text-gray-400'>RAG-powered documentation assistant</p>
+          </div>
+          <nav className='flex gap-1 rounded-lg bg-gray-100 p-1'>
+            <button
+              onClick={() => setView('chat')}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                view === 'chat'
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setView('sources')}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                view === 'sources'
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Sources
+            </button>
+          </nav>
+        </header>
 
-          {loading && (
-            <p className='mt-4 text-sm text-gray-400'>Checking services...</p>
-          )}
+        {view === 'sources' && (
+          <SourcesPanel onSessionCreated={handleSessionCreatedFromSources} />
+        )}
 
-          {error && (
-            <p className='mt-4 text-sm text-red-600'>
-              Could not reach the API. Is the backend running?
-            </p>
-          )}
+        {view === 'chat' && selectedId && (
+          <ChatWindow
+            key={selectedId}
+            sessionId={selectedId}
+          />
+        )}
 
-          {health && (
-            <div className='mt-3 divide-y divide-gray-100'>
-              <StatusRow label='API' status={health.status} />
-              <StatusRow label='Database' status={health.database} />
-              <StatusRow label='Ollama' status={health.ollama} />
+        {view === 'chat' && !selectedId && (
+          <div className='flex flex-1 flex-col items-center justify-center gap-4 text-center'>
+            <div>
+              <p className='text-base font-medium text-gray-600'>No session selected</p>
+              <p className='mt-1 text-sm text-gray-400'>
+                Create a new session or pick one from the sidebar
+              </p>
             </div>
-          )}
-        </div>
-
-        <p className='mt-6 text-center text-xs text-gray-400'>Phase 1 — Infrastructure</p>
+            <button
+              onClick={handleNewSession}
+              className='rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700'
+            >
+              Start new session
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
