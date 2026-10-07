@@ -1,10 +1,12 @@
 import json
+import math
 from typing import Any
 from uuid import UUID
 
 import structlog
 
 from app.db.connection import get_pool
+from app.exceptions import EmbeddingError
 
 logger = structlog.get_logger()
 
@@ -54,26 +56,31 @@ async def create_message(
     pool = get_pool()
     sources_json = json.dumps(sources) if sources is not None else None
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            INSERT INTO messages (session_id, role, content, sources)
-            VALUES ($1, $2, $3, $4::jsonb)
-            RETURNING *
-            """,
-            session_id,
-            role,
-            content,
-            sources_json,
-        )
-        await conn.execute(
-            'UPDATE sessions SET updated_at = now() WHERE id = $1',
-            session_id,
-        )
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """
+                INSERT INTO messages (session_id, role, content, sources)
+                VALUES ($1, $2, $3, $4::jsonb)
+                RETURNING *
+                """,
+                session_id,
+                role,
+                content,
+                sources_json,
+            )
+            await conn.execute(
+                'UPDATE sessions SET updated_at = now() WHERE id = $1',
+                session_id,
+            )
     result = dict(row)  # type: ignore[arg-type]
-    # asyncpg decodes jsonb on read; normalize None for consistency
     if result.get('sources') is None:
         result['sources'] = None
     return result
+
+
+async def delete_message(message_id: UUID) -> None:
+    pool = get_pool()
+    await pool.execute('DELETE FROM messages WHERE id = $1', message_id)
 
 
 async def list_messages(session_id: UUID) -> list[dict[str, Any]]:
@@ -90,6 +97,9 @@ async def search_chunks(
     source_ids: list[UUID],
     top_k: int = 5,
 ) -> list[dict[str, Any]]:
+    if not all(math.isfinite(f) for f in embedding):
+        raise EmbeddingError('Query embedding contains non-finite values (NaN/Inf)')
+
     pool = get_pool()
     embedding_str = '[' + ','.join(str(f) for f in embedding) + ']'
 

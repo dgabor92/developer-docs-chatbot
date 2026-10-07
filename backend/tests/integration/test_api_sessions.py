@@ -209,3 +209,68 @@ async def test_session_with_source_ids_stores_selection(client: AsyncClient) -> 
     assert fake_source_id in data['source_ids']
 
     await client.delete(f'/api/sessions/{data["id"]}')
+
+
+@pytest.mark.asyncio
+async def test_send_message_sse_error_event_on_stream_failure(
+    client: AsyncClient,
+    mock_ollama: object,
+) -> None:
+    from app.exceptions import ChatError
+
+    async def _failing_stream(*args, **kwargs):
+        yield 'Partial '
+        raise ChatError('Anthropic API unexpectedly disconnected')
+
+    from unittest.mock import patch
+
+    create = await client.post('/api/sessions', json={'source_ids': []})
+    session_id = create.json()['id']
+
+    with patch('app.services.chat.anthropic_client') as mock:
+        mock.stream = _failing_stream
+        response = await client.post(
+            f'/api/sessions/{session_id}/messages',
+            json={'content': 'Trigger a mid-stream failure'},
+        )
+
+    assert response.status_code == 200
+    events = parse_sse(response.text)
+    event_types = [e['event'] for e in events]
+    assert 'error' in event_types
+    assert 'done' not in event_types
+
+    # Orphan user message must be cleaned up — no messages left in session
+    session = await client.get(f'/api/sessions/{session_id}')
+    assert session.json()['messages'] == []
+
+    await client.delete(f'/api/sessions/{session_id}')
+
+
+@pytest.mark.asyncio
+async def test_send_message_title_not_overwritten_on_second_message(
+    client: AsyncClient,
+    mock_ollama: object,
+    mock_anthropic: object,
+) -> None:
+    create = await client.post('/api/sessions', json={'source_ids': []})
+    session_id = create.json()['id']
+
+    first = 'What is Tailwind?'
+    r1 = await client.post(
+        f'/api/sessions/{session_id}/messages',
+        json={'content': first},
+    )
+    assert any(e['event'] == 'done' for e in parse_sse(r1.text))
+
+    r2 = await client.post(
+        f'/api/sessions/{session_id}/messages',
+        json={'content': 'And how does it compare to Bootstrap?'},
+    )
+    assert any(e['event'] == 'done' for e in parse_sse(r2.text))
+
+    session = await client.get(f'/api/sessions/{session_id}')
+    # Title must remain from the FIRST message, not be overwritten by the second
+    assert session.json()['title'] == first
+
+    await client.delete(f'/api/sessions/{session_id}')

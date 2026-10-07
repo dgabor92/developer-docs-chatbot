@@ -1,5 +1,6 @@
 from uuid import UUID
 
+import asyncpg
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from app.db import sources as sources_db
@@ -14,18 +15,17 @@ async def create_source(
     payload: SourceCreate,
     background_tasks: BackgroundTasks,
 ) -> SourceResponse:
-    existing = await sources_db.list_sources()
-    if any(s['base_url'] == payload.base_url for s in existing):
+    try:
+        source = await sources_db.create_source(
+            name=payload.name,
+            base_url=payload.base_url,
+            description=payload.description,
+        )
+    except asyncpg.UniqueViolationError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail='A source with this base_url already exists',
         )
-
-    source = await sources_db.create_source(
-        name=payload.name,
-        base_url=payload.base_url,
-        description=payload.description,
-    )
 
     background_tasks.add_task(
         ingestion_service.ingest_source,
@@ -72,6 +72,7 @@ async def reindex_source(
             detail='Source is already being indexed',
         )
 
+    await sources_db.update_source_status(source_id, 'indexing')
     background_tasks.add_task(
         ingestion_service.ingest_source,
         source['id'],

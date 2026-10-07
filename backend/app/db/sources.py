@@ -1,9 +1,11 @@
+import math
 from typing import Any
 from uuid import UUID
 
 import structlog
 
 from app.db.connection import get_pool
+from app.exceptions import EmbeddingError
 
 logger = structlog.get_logger()
 
@@ -77,6 +79,11 @@ async def delete_source(source_id: UUID) -> bool:
     return result == 'DELETE 1'
 
 
+async def delete_chunks_for_source(source_id: UUID) -> None:
+    pool = get_pool()
+    await pool.execute('DELETE FROM chunks WHERE source_id = $1', source_id)
+
+
 async def insert_chunk(
     source_id: UUID,
     url: str,
@@ -84,9 +91,12 @@ async def insert_chunk(
     content: str,
     embedding: list[float],
 ) -> None:
+    if not all(math.isfinite(f) for f in embedding):
+        raise EmbeddingError(f'Embedding for {url} contains non-finite values (NaN/Inf)')
+
     pool = get_pool()
     embedding_str = '[' + ','.join(str(f) for f in embedding) + ']'
-    token_count = len(content) // 4  # rough estimate: ~4 chars per token
+    token_count = len(content) // 4
     await pool.execute(
         """
         INSERT INTO chunks (source_id, url, title, content, token_count, embedding)

@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import health, sessions, sources
+from app.clients.ollama import ollama_client
 from app.config import settings
 from app.db.connection import close_db_pool, init_db_pool
 
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info('startup_complete', environment=settings.environment)
     yield
     await close_db_pool()
+    await ollama_client.aclose()
     logger.info('shutdown_complete')
 
 

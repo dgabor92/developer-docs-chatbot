@@ -7,6 +7,7 @@ import structlog
 from app.clients.anthropic import anthropic_client
 from app.db.sessions import (
     create_message,
+    delete_message,
     get_session,
     list_messages,
     update_session_title,
@@ -77,8 +78,7 @@ class ChatService:
         ]
         message = await create_message(session_id, 'assistant', response_text, sources)
 
-        # Auto-title from the first user message (history had 1 entry: the user msg we saved)
-        if len(history) == 1:
+        if session['title'] is None:
             await update_session_title(session_id, content[:80])
 
         logger.info(
@@ -89,16 +89,18 @@ class ChatService:
 
         return dict(message) | {'sources': sources}
 
-
     async def stream_message(
         self,
         session_id: UUID,
         content: str,
     ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
         session = await get_session(session_id)
-        source_ids = list(session['source_ids'] or []) if session else []
+        if session is None:
+            raise NotFoundError('session', str(session_id))
 
-        await create_message(session_id, 'user', content)
+        source_ids = list(session['source_ids'] or [])
+
+        user_msg = await create_message(session_id, 'user', content)
 
         chunks = await retrieval_service.search(content, source_ids)
         history = await list_messages(session_id)
@@ -107,9 +109,14 @@ class ChatService:
         system = SYSTEM_PROMPT_TEMPLATE.format(context=_build_context(chunks))
 
         full_text = ''
-        async for token in anthropic_client.stream(system, messages):
-            full_text += token
-            yield 'token', {'content': token}
+        try:
+            async for token in anthropic_client.stream(system, messages):
+                full_text += token
+                yield 'token', {'content': token}
+        except Exception:
+            # Streaming failed — remove the orphan user message to keep history consistent
+            await delete_message(user_msg['id'])
+            raise
 
         sources = [
             {'url': c.url, 'title': c.title, 'score': c.score}
@@ -119,8 +126,7 @@ class ChatService:
 
         message = await create_message(session_id, 'assistant', full_text, sources)
 
-        # history had 1 entry (the user msg we just saved) → first exchange
-        if len(history) == 1:
+        if session['title'] is None:
             await update_session_title(session_id, content[:80])
 
         logger.info(

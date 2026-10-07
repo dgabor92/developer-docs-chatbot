@@ -1,5 +1,5 @@
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -28,14 +28,14 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
-def mock_ollama() -> AsyncGenerator[AsyncMock, None]:
+def mock_ollama() -> Generator[AsyncMock, None, None]:
     with patch('app.services.retrieval.ollama_client') as mock:
         mock.embed = AsyncMock(return_value=MOCK_EMBEDDING)
         yield mock
 
 
 @pytest.fixture
-def mock_anthropic() -> AsyncGenerator[AsyncMock, None]:
+def mock_anthropic() -> Generator[AsyncMock, None, None]:
     async def _mock_stream(*args, **kwargs):
         for token in MOCK_TOKENS:
             yield token

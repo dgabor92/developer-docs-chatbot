@@ -154,6 +154,9 @@ class IngestionService:
             pages = await self._crawl(base_url)
             log.info('crawl_complete', pages=len(pages))
 
+            # Remove stale chunks before inserting new ones to avoid duplicates on reindex
+            await sources_db.delete_chunks_for_source(source_id)
+
             total_chunks = 0
             for page in pages:
                 chunks = self._chunker.split(page.content)
