@@ -23,14 +23,14 @@ export function ChatInput({ onSend, disabled }: Props) {
   }
 
   return (
-    <div className='flex items-end gap-3 border-t border-gray-200 bg-white px-4 py-3'>
+    <div className='flex items-end gap-3 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900'>
       <textarea
         ref={ref}
         rows={1}
         placeholder='Ask a question... (Enter to send, Shift+Enter for newline)'
         disabled={disabled}
         onKeyDown={handleKeyDown}
-        className='flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-50'
+        className='flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-900 dark:disabled:bg-gray-800'
         style={{ maxHeight: '160px', overflowY: 'auto' }}
         onInput={e => {
           const el = e.currentTarget

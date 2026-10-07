@@ -47,15 +47,15 @@ export function ChatWindow({ sessionId }: Props) {
 
   return (
     <div className='flex flex-1 flex-col overflow-hidden'>
-      <div className='flex-1 overflow-y-auto px-6 py-4'>
+      <div className='flex-1 overflow-y-auto bg-white px-6 py-4 dark:bg-gray-900'>
         {loadingMessages && (
-          <p className='text-center text-sm text-gray-400'>Loading messages...</p>
+          <p className='text-center text-sm text-gray-400 dark:text-gray-500'>Loading messages...</p>
         )}
 
         {!loadingMessages && messages.length === 0 && !streaming && (
           <div className='flex h-full flex-col items-center justify-center gap-2 text-center'>
-            <p className='text-base font-medium text-gray-500'>Ask anything about the docs</p>
-            <p className='text-sm text-gray-400'>
+            <p className='text-base font-medium text-gray-500 dark:text-gray-400'>Ask anything about the docs</p>
+            <p className='text-sm text-gray-400 dark:text-gray-500'>
               Add a source first, then start chatting
             </p>
           </div>
@@ -71,7 +71,7 @@ export function ChatWindow({ sessionId }: Props) {
           )}
 
           {error && !streaming && (
-            <div className='rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600'>
+            <div className='rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400'>
               Error: {error}
             </div>
           )}

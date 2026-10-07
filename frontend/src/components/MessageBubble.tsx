@@ -9,8 +9,8 @@ export function StreamingBubble({ content, sources }: StreamingBubbleProps) {
   return (
     <div className='flex flex-col gap-2'>
       <div className='flex justify-start'>
-        <div className='max-w-[80%] rounded-2xl rounded-tl-sm bg-white px-4 py-3 shadow-sm ring-1 ring-gray-200'>
-          <p className='whitespace-pre-wrap text-sm text-gray-800'>
+        <div className='max-w-[80%] rounded-2xl rounded-tl-sm bg-white px-4 py-3 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700'>
+          <p className='whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-100'>
             {content}
             <span className='ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-indigo-500' />
           </p>
@@ -35,7 +35,7 @@ export function MessageBubble({ message }: BubbleProps) {
           className={`max-w-[80%] rounded-2xl px-4 py-3 ${
             isUser
               ? 'rounded-tr-sm bg-indigo-600 text-white'
-              : 'rounded-tl-sm bg-white shadow-sm ring-1 ring-gray-200 text-gray-800'
+              : 'rounded-tl-sm bg-white shadow-sm ring-1 ring-gray-200 text-gray-800 dark:bg-gray-800 dark:ring-gray-700 dark:text-gray-100'
           }`}
         >
           <p className='whitespace-pre-wrap text-sm'>{message.content}</p>
@@ -57,7 +57,7 @@ function SourcesList({ sources }: { sources: SourceCitation[] }) {
           href={s.url}
           target='_blank'
           rel='noopener noreferrer'
-          className='inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-colors'
+          className='inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-400 dark:hover:border-indigo-800'
         >
           <span className='max-w-[200px] truncate'>{s.title ?? s.url}</span>
           <span className='text-gray-400'>{(s.score * 100).toFixed(0)}%</span>
