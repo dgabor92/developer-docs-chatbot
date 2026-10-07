@@ -1,47 +1,47 @@
 # Developer Docs Chatbot
 
-RAG-alapú chatbot fejlesztői dokumentációkhoz. Bármely dokumentációs oldalt be lehet indexelni URL alapján, utána természetes nyelvű kérdéseket lehet feltenni róla -- streaming válaszokkal, chat historyval és forráshivatkozásokkal.
+A RAG-powered chatbot for developer documentation. Index any documentation site by URL and ask questions about it in natural language — with streaming responses, persistent chat history, and source citations.
 
 ## Stack
 
-| Réteg | Technológia |
+| Layer | Technology |
 |---|---|
 | Backend | Python 3.12 + FastAPI |
 | LLM | Claude Haiku 4.5 (Anthropic SDK, SSE streaming) |
-| Embeddings | Ollama (nomic-embed-text, lokális) |
-| Adatbázis | PostgreSQL 16 + pgvector |
+| Embeddings | Ollama (nomic-embed-text, local) |
+| Database | PostgreSQL 16 + pgvector |
 | Frontend | Vite + React + TypeScript + TailwindCSS |
-| Konténerizáció | Docker + Docker Compose |
-| Tesztelés | Pytest (backend) + Vitest (frontend) |
+| Containerization | Docker + Docker Compose |
+| Testing | Pytest (backend) + Vitest (frontend) |
 
-## Előfeltételek
+## Prerequisites
 
 - Docker + Docker Compose
-- Ollama telepítve és futtatva lokálisan (`ollama pull nomic-embed-text`)
-- Anthropic API kulcs
+- Ollama installed and running locally (`ollama pull nomic-embed-text`)
+- Anthropic API key
 
-## Gyors start
+## Quick Start
 
 ```bash
-# 1. Környezeti változók
+# 1. Environment variables
 cp .env.example .env
-# Szerkeszd: ANTHROPIC_API_KEY=...
+# Edit: ANTHROPIC_API_KEY=...
 
-# 2. Szolgáltatások indítása
+# 2. Start services
 docker compose up -d
 
-# 3. Adatbázis migrációk
+# 3. Run database migrations
 docker compose exec api python -m app.db.migrate
 
-# 4. Frontend dev szerver (fejlesztéshez)
+# 4. Frontend dev server (development only)
 cd frontend && npm install && npm run dev
 ```
 
-Az API elérhető: http://localhost:8000  
-A frontend elérhető: http://localhost:5173 (dev) / http://localhost:3000 (prod)  
-API dokumentáció: http://localhost:8000/docs
+API: http://localhost:8000  
+Frontend: http://localhost:5173 (dev) / http://localhost:3000 (prod)  
+API docs: http://localhost:8000/docs
 
-## Dokumentáció indexelése
+## Indexing Documentation
 
 ```bash
 curl -X POST http://localhost:8000/api/sources \
@@ -49,55 +49,55 @@ curl -X POST http://localhost:8000/api/sources \
   -d '{"name": "Tailwind CSS", "base_url": "https://tailwindcss.com/docs"}'
 ```
 
-## Projekt struktúra
+## Project Structure
 
 ```
 developer-docs-chatbot/
 ├── README.md
-├── DEVELOPMENT_SPEC.md      # Részletes specifikáció és fejlesztési terv
+├── DEVELOPMENT_SPEC.md      # Full specification and development plan
 ├── docker-compose.yml
 ├── .env.example
 ├── backend/
 │   ├── Dockerfile
 │   ├── pyproject.toml
 │   └── app/
-│       ├── api/             # FastAPI route handlerek
-│       ├── services/        # Üzleti logika (ingestion, retrieval, chat)
-│       ├── db/              # Adatbázis kapcsolat + migrációk
-│       ├── models/          # Pydantic sémák
-│       └── config.py        # Pydantic-settings konfiguráció
+│       ├── api/             # FastAPI route handlers
+│       ├── services/        # Business logic (ingestion, retrieval, chat)
+│       ├── db/              # Database connection + migrations
+│       ├── models/          # Pydantic schemas
+│       └── config.py        # Pydantic-settings configuration
 ├── frontend/
 │   ├── Dockerfile
 │   └── src/
-│       ├── components/      # React komponensek
-│       ├── hooks/           # Custom hookok (useChat, useSources, useSSE)
-│       ├── api/             # API kliens függvények
-│       └── types/           # TypeScript típusok
+│       ├── components/      # React components
+│       ├── hooks/           # Custom hooks (useChat, useSources, useSSE)
+│       ├── api/             # API client functions
+│       └── types/           # TypeScript types
 └── docs/
-    └── architecture.md      # Architektúra részletei
+    └── architecture.md
 ```
 
-## Fejlesztési fázisok
+## Development Phases
 
-Részletesen: [DEVELOPMENT_SPEC.md](DEVELOPMENT_SPEC.md)
+See [DEVELOPMENT_SPEC.md](DEVELOPMENT_SPEC.md) for full details.
 
-1. **Infrastruktúra** -- Docker, FastAPI skeleton, DB schema
-2. **Dokumentáció indexelés** -- web scraper, chunking, embeddings
-3. **RAG core** -- pgvector keresés, Claude integráció
-4. **Chat history** -- session kezelés, multi-turn conversation
-5. **SSE streaming** -- valós idejű token megjelenítés
-6. **Frontend** -- chat UI, source management
-7. **Code quality** -- tesztek, lint, mypy, review
+1. **Infrastructure** — Docker, FastAPI skeleton, DB schema
+2. **Document ingestion** — web scraper, chunking, embeddings
+3. **RAG core** — pgvector search, Claude integration
+4. **Chat history** — session management, multi-turn conversation
+5. **SSE streaming** — real-time token display
+6. **Frontend** — chat UI, source management
+7. **Code quality** — tests, lint, mypy, review
 
 ## AI Engineering Learning Path
 
-Ez a projekt az AI Engineering learning path **6. fázisa**.
+This project is the **6th phase** of the AI Engineering learning path.
 
-| Fázis | Projekt | Státusz |
+| Phase | Project | Status |
 |---|---|---|
-| 1 | Claude API basics | Kész |
-| 2 | Prompt engineering | Kész |
-| 3 | RAG pipeline | Kész |
-| 4 | FastAPI + pgvector RAG demo | Kész |
-| 5 | LLM evaluation (RAGAS) | Kész |
-| 6 | **Developer Docs Chatbot** | **Folyamatban** |
+| 1 | Claude API basics | Done |
+| 2 | Prompt engineering | Done |
+| 3 | RAG pipeline | Done |
+| 4 | FastAPI + pgvector RAG demo | Done |
+| 5 | LLM evaluation (RAGAS) | Done |
+| 6 | **Developer Docs Chatbot** | **In progress** |

@@ -1,23 +1,23 @@
-# Development Specification -- Developer Docs Chatbot
+# Development Specification — Developer Docs Chatbot
 
-## Projekt célok
+## Project Goals
 
-Egy production-ready minőségű, de személyes/portfolio célú RAG chatbot, ami:
-- Bármely fejlesztői dokumentációs URL-t be tud indexelni
-- Természetes nyelvű kérdésekre pontosan válaszol, forráshivatkozásokkal
-- Streaming válaszokat ad (SSE) valós idejű UX-ért
-- Megőrzi a chat historyt session-önként
-- Senior szintű, olvasható, jól tagolt kódbázist mutat
+A production-quality RAG chatbot for developer documentation that:
+- Indexes any documentation URL via web scraping
+- Answers natural language questions with source citations
+- Streams responses in real time (SSE) for a responsive UX
+- Persists chat history per session
+- Demonstrates senior-level, readable, well-structured code
 
-**Nem cél (jelen fázisban):**
-- Authentikáció / multi-user support
-- Production deployment (nincs load balancer, nincs SSL)
-- PDF / fájl feltöltés (csak URL-alapú indexelés)
-- Fizetős embedding API (Ollama lokális elegendő)
+**Out of scope for this phase:**
+- Authentication / multi-user support
+- Production deployment (no load balancer, no SSL)
+- PDF / file upload (URL-only ingestion)
+- Paid embedding APIs (local Ollama is sufficient)
 
 ---
 
-## Architektúra
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -28,7 +28,7 @@ Egy production-ready minőségű, de személyes/portfolio célú RAG chatbot, am
 │  │   ChatView   │  │  SessionList   │  │  SourcesView   │  │
 │  └──────────────┘  └────────────────┘  └────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │         useChat  useSSE  useSources  useSession       │   │
+│  │       useChat  useSSE  useSources  useSession         │   │
 │  └──────────────────────────────────────────────────────┘   │
 └──────────────────────────┬──────────────────────────────────┘
                            │ HTTP / SSE
@@ -41,12 +41,12 @@ Egy production-ready minőségű, de személyes/portfolio célú RAG chatbot, am
 │  └───────────┬──────────────┬───────────────┬───────────┘   │
 │              │              │               │               │
 │  ┌───────────▼──┐  ┌────────▼──────┐  ┌────▼────────────┐  │
-│  │ ChatService  │  │IngestionSvc   │  │ RetrievalService │  │
+│  │ ChatService  │  │IngestionSvc   │  │RetrievalService  │  │
 │  └───────────┬──┘  └────────┬──────┘  └────┬────────────┘  │
 │              │              │               │               │
 │  ┌───────────▼──┐  ┌────────▼──────┐  ┌────▼────────────┐  │
-│  │  Anthropic   │  │  OllamaClient │  │  pgvector query │  │
-│  │  SDK (SSE)   │  │  (embeddings) │  │  (cosine sim)   │  │
+│  │  Anthropic   │  │ OllamaClient  │  │ pgvector query  │  │
+│  │  SDK (SSE)   │  │ (embeddings)  │  │ (cosine sim)    │  │
 │  └──────────────┘  └───────────────┘  └─────────────────┘  │
 └──────────────────────────┬──────────────────────────────────┘
                            │
@@ -57,14 +57,14 @@ Egy production-ready minőségű, de személyes/portfolio célú RAG chatbot, am
             └───────────────────────────────┘
 ```
 
-### Adatfolyam -- kérdés megválaszolása
+### Request Data Flow
 
 ```
 User question
     → embed question (Ollama)
-    → cosine search in pgvector (top-5 chunks)
+    → cosine search in pgvector (top-5 chunks, filtered by session.source_ids)
     → assemble prompt (system + context + history + question)
-    → stream to Claude Haiku 4.5 (Anthropic SDK)
+    → stream response from Claude Haiku 4.5 (Anthropic SDK)
     → SSE token events → frontend
     → persist message + sources to DB
     → SSE done event
@@ -72,10 +72,10 @@ User question
 
 ---
 
-## Adatbázis séma
+## Database Schema
 
 ```sql
--- Dokumentációs források (indexelt weboldalak)
+-- Documentation sources (indexed websites)
 CREATE TABLE sources (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name        TEXT NOT NULL,
@@ -89,7 +89,7 @@ CREATE TABLE sources (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Szöveg chunkok embedding vektorokkal
+-- Text chunks with embedding vectors
 CREATE TABLE chunks (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id   UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
@@ -97,28 +97,29 @@ CREATE TABLE chunks (
     title       TEXT,
     content     TEXT NOT NULL,
     token_count INT,
-    embedding   vector(768),  -- nomic-embed-text dimenzió
+    embedding   vector(768),  -- nomic-embed-text dimensions
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX ON chunks USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 100);
 
--- Chat sessionök
+-- Chat sessions
 CREATE TABLE sessions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title       TEXT,           -- első kérdésből auto-generált
+    title       TEXT,           -- auto-generated from first user message
     source_ids  UUID[] NOT NULL DEFAULT '{}',
+    -- empty = search all sources
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Chat üzenetek
+-- Chat messages
 CREATE TABLE messages (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id  UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     role        TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
     content     TEXT NOT NULL,
-    sources     JSONB,  -- [{url, title, score}] assistant üzenetekhez
+    sources     JSONB,  -- [{url, title, score}] for assistant messages
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX ON messages (session_id, created_at);
@@ -126,37 +127,37 @@ CREATE INDEX ON messages (session_id, created_at);
 
 ---
 
-## API kontrakt
+## API Contract
 
 ### Sessions
 
-| Method | Endpoint | Leírás |
-|--------|----------|--------|
-| POST | /api/sessions | Új session létrehozása |
-| GET | /api/sessions | Sessionök listázása |
-| GET | /api/sessions/{id} | Session + üzenetek lekérése |
-| DELETE | /api/sessions/{id} | Session törlése |
-| POST | /api/sessions/{id}/messages | Üzenet küldése (SSE stream) |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/sessions | Create new session |
+| GET | /api/sessions | List all sessions |
+| GET | /api/sessions/{id} | Get session with messages |
+| DELETE | /api/sessions/{id} | Delete session |
+| POST | /api/sessions/{id}/messages | Send message (returns SSE stream) |
 
 ### Sources
 
-| Method | Endpoint | Leírás |
-|--------|----------|--------|
-| GET | /api/sources | Összes forrás státusszal |
-| POST | /api/sources | Új URL hozzáadása + indexelés indítása |
-| GET | /api/sources/{id} | Forrás részletei |
-| DELETE | /api/sources/{id} | Forrás + chunkjai törlése |
-| POST | /api/sources/{id}/reindex | Újraindexelés |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/sources | List all sources with status |
+| POST | /api/sources | Add URL and trigger background indexing |
+| GET | /api/sources/{id} | Get source details |
+| DELETE | /api/sources/{id} | Remove source and all its chunks |
+| POST | /api/sources/{id}/reindex | Re-index a source |
 
 ### System
 
-| Method | Endpoint | Leírás |
-|--------|----------|--------|
-| GET | /api/health | DB + Ollama + Anthropic státusz |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/health | DB + Ollama + Anthropic status |
 
-### SSE streaming formátum
+### SSE Streaming Format
 
-A `POST /api/sessions/{id}/messages` SSE stream-et ad vissza:
+`POST /api/sessions/{id}/messages` returns an SSE stream:
 
 ```
 event: token
@@ -172,41 +173,42 @@ event: done
 data: {"message_id": "uuid", "session_id": "uuid"}
 
 event: error
-data: {"message": "hiba leírása"}
+data: {"message": "error description"}
 ```
 
 ---
 
-## Projekt struktúra (részletes)
+## Project Structure (detailed)
 
 ```
 backend/app/
 ├── main.py                  # FastAPI app factory, middleware, startup events
-├── config.py                # Pydantic-settings: env vars validálva startup-kor
+├── config.py                # Pydantic-settings: all env vars validated at startup
+├── exceptions.py            # Domain-specific exceptions
 ├── api/
 │   ├── __init__.py
-│   ├── sessions.py          # Session + üzenet endpointok
-│   ├── sources.py           # Source CRUD + indexelés trigger
+│   ├── sessions.py          # Session + message endpoints
+│   ├── sources.py           # Source CRUD + indexing trigger
 │   └── health.py            # Health check
 ├── services/
 │   ├── __init__.py
-│   ├── chat.py              # ChatService: history összerakás, prompt, streaming
-│   ├── retrieval.py         # RetrievalService: embedding + pgvector keresés
-│   └── ingestion.py         # IngestionService: scraping, chunking, indexelés
+│   ├── chat.py              # ChatService: history assembly, prompt, streaming
+│   ├── retrieval.py         # RetrievalService: embed query + pgvector search
+│   └── ingestion.py         # IngestionService: scraping, chunking, indexing
 ├── db/
 │   ├── __init__.py
 │   ├── connection.py        # asyncpg pool setup
-│   ├── migrate.py           # Migrációk futtatása
+│   ├── migrate.py           # Migration runner
 │   └── migrations/
 │       ├── 001_initial.sql
 │       └── 002_indexes.sql
 ├── models/
 │   ├── __init__.py
-│   ├── session.py           # Session + Message Pydantic modellek
-│   └── source.py            # Source Pydantic modellek
+│   ├── session.py           # Session + Message Pydantic models
+│   └── source.py            # Source Pydantic models
 └── clients/
     ├── __init__.py
-    ├── ollama.py            # Ollama HTTP kliens (httpx)
+    ├── ollama.py            # Ollama HTTP client (httpx)
     └── anthropic.py         # Anthropic SDK wrapper (streaming)
 
 frontend/src/
@@ -214,7 +216,7 @@ frontend/src/
 ├── App.tsx
 ├── components/
 │   ├── ChatView/
-│   │   ├── index.tsx        # Fő chat nézet
+│   │   ├── index.tsx
 │   │   ├── MessageList.tsx
 │   │   ├── MessageItem.tsx
 │   │   └── ChatInput.tsx
@@ -225,11 +227,12 @@ frontend/src/
 │   │   ├── index.tsx
 │   │   ├── SourceItem.tsx
 │   │   └── AddSourceForm.tsx
-│   └── ui/                  # Generikus UI elemek (Button, Badge, Spinner)
+│   └── ui/                  # Generic UI primitives (Button, Badge, Spinner)
 ├── hooks/
-│   ├── useChat.ts           # Üzenet küldés + SSE kezelés
-│   ├── useSources.ts        # Source CRUD
-│   └── useSession.ts        # Session kezelés
+│   ├── useChat.ts
+│   ├── useSources.ts
+│   ├── useSession.ts
+│   └── useSSE.ts
 ├── api/
 │   ├── client.ts            # Base fetch wrapper
 │   ├── sessions.ts
@@ -241,169 +244,169 @@ frontend/src/
 
 ---
 
-## Fejlesztési fázisok
+## Development Phases
 
-### Fázis 1 -- Infrastruktúra és projekt skeleton
+### Phase 1 — Infrastructure and Project Skeleton
 
-**Cél:** minden fut, össze van kötve, az alapok rendben vannak.
+**Goal:** everything runs, services are connected, foundation is solid.
 
-Feladatok:
+Tasks:
 - [ ] `docker-compose.yml`: PostgreSQL 16 + pgvector + Ollama service
 - [ ] `.env.example` + pydantic-settings config
-- [ ] FastAPI app factory (`main.py`), CORS, logging
+- [ ] FastAPI app factory (`main.py`), CORS, structured logging
 - [ ] asyncpg connection pool
-- [ ] SQL migrációk (sources, chunks, sessions, messages + indexek)
-- [ ] `GET /api/health` -- DB + Ollama státusz
+- [ ] SQL migrations (sources, chunks, sessions, messages + indexes)
+- [ ] `GET /api/health` — DB + Ollama status
 - [ ] Vite + React + TypeScript + TailwindCSS scaffold
-- [ ] `pyproject.toml`: ruff, mypy, pytest konfiguráció
+- [ ] `pyproject.toml`: ruff, mypy, pytest configuration
 
-Elfogadási kritériumok:
-- `docker compose up` sikeresen indul, minden service healthy
-- `GET /api/health` 200-at ad vissza DB + Ollama státusszal
-- Frontend dev szerver elindul, API-ra csatlakozik
+Acceptance criteria:
+- `docker compose up` starts all services healthy
+- `GET /api/health` returns 200 with DB + Ollama status
+- Frontend dev server starts and connects to the API
 
 ---
 
-### Fázis 2 -- Dokumentáció indexelés
+### Phase 2 — Document Ingestion
 
-**Cél:** URL-ből chunkok keletkeznek az adatbázisban.
+**Goal:** a URL becomes searchable chunks in the database.
 
-Feladatok:
+Tasks:
 - [ ] `IngestionService`: web scraper (httpx + BeautifulSoup4)
-- [ ] Recursive text splitter (500 token/chunk, 50 token overlap)
-- [ ] Ollama embedding generálás (`nomic-embed-text`)
-- [ ] Asyncio background task (FastAPI `BackgroundTasks`)
-- [ ] Source státusz frissítés: pending → indexing → ready / error
-- [ ] `POST /api/sources` + `GET /api/sources` + `DELETE /api/sources/{id}`
-- [ ] Pytest unit tesztek: chunker, scraper mock
+- [ ] Recursive text splitter (500 tokens/chunk, 50-token overlap)
+- [ ] Embedding generation via Ollama (`nomic-embed-text`)
+- [ ] Async background task (FastAPI `BackgroundTasks`)
+- [ ] Source status transitions: pending → indexing → ready / error
+- [ ] `POST /api/sources`, `GET /api/sources`, `DELETE /api/sources/{id}`
+- [ ] Pytest unit tests: chunker, scraper mock
 
-Elfogadási kritériumok:
-- Egy valós docs URL (pl. https://tailwindcss.com/docs/installation) sikeresen indexelve
-- Chunkök megjelennek a DB-ben embedding vektorokkal
-- Source státusz helyesen frissül
+Acceptance criteria:
+- A real docs URL (e.g., https://tailwindcss.com/docs/installation) is successfully indexed
+- Chunks with embedding vectors appear in the DB
+- Source status transitions correctly
 
 ---
 
-### Fázis 3 -- RAG core (nem-streaming)
+### Phase 3 — RAG Core (non-streaming)
 
-**Cél:** kérdés → pontos válasz forráshivatkozásokkal (streaming nélkül).
+**Goal:** question → accurate answer with source citations (no streaming yet).
 
-Feladatok:
+Tasks:
 - [ ] `RetrievalService`: query embedding + pgvector cosine search (top-5)
-- [ ] Kontextus összerakás: chunk content + metadata
-- [ ] System prompt template (kontextus + kérdés)
-- [ ] Claude Haiku 4.5 integráció (Anthropic SDK, non-streaming)
-- [ ] `POST /api/sessions` + `POST /api/sessions/{id}/messages` (blokkoló)
-- [ ] Válasz + sources mentése DB-be
-- [ ] Pytest integrációs teszt: teljes RAG pipeline
+- [ ] Context assembly with source metadata
+- [ ] System prompt template (context + question)
+- [ ] Claude Haiku 4.5 integration (Anthropic SDK, non-streaming)
+- [ ] `POST /api/sessions`, `POST /api/sessions/{id}/messages` (blocking)
+- [ ] Persist response + sources to DB
+- [ ] Pytest integration test: full RAG pipeline
 
-Elfogadási kritériumok:
-- Kérdés → releváns válasz, forráshivatkozásokkal
-- Context window kezelés (hosszú history truncation)
-- Tesztek zöldek
-
----
-
-### Fázis 4 -- Chat history és session kezelés
-
-**Cél:** multi-turn conversation, history DB-ből töltve.
-
-Feladatok:
-- [ ] Session CRUD: create, list, get (üzenetekkel), delete
-- [ ] Chat history beépítése a promptba (utolsó N üzenet)
-- [ ] Session title auto-generálás (első kérdésből, Claude rövid hívással)
-- [ ] Source selection per session (session.source_ids)
-- [ ] `GET /api/sessions/{id}` -- üzenetek teljes listájával
-
-Elfogadási kritériumok:
-- Multi-turn conversation helyesen hivatkozik korábbi üzenetekre
-- History DB-ből töltődik, nem memóriából
-- Session törléskor üzenetek is törlődnek (CASCADE)
+Acceptance criteria:
+- Question returns a relevant answer with source citations
+- Context window management handles long histories (truncation)
+- Tests pass
 
 ---
 
-### Fázis 5 -- SSE streaming
+### Phase 4 — Chat History and Session Management
 
-**Cél:** valós idejű token megjelenítés a frontenden.
+**Goal:** multi-turn conversation with history loaded from the database.
 
-Feladatok:
-- [ ] FastAPI `StreamingResponse` SSE implementáció
-- [ ] Anthropic SDK `.stream()` token-onkénti olvasás
-- [ ] Sources event a stream végén
+Tasks:
+- [ ] Session CRUD: create, list, get (with messages), delete
+- [ ] Chat history included in prompt (last N messages)
+- [ ] Auto-generate session title from first user message
+- [ ] Source selection per session (`session.source_ids`)
+- [ ] `GET /api/sessions/{id}` returns full message list
+
+Acceptance criteria:
+- Multi-turn conversation correctly references earlier messages
+- History is fetched from DB, not held in memory
+- Session deletion cascades to messages
+
+---
+
+### Phase 5 — SSE Streaming
+
+**Goal:** real-time token display in the frontend.
+
+Tasks:
+- [ ] FastAPI `StreamingResponse` SSE implementation
+- [ ] Token-by-token reading from Anthropic SDK `.stream()`
+- [ ] Sources event sent after stream completes
 - [ ] Frontend `EventSource` hook (`useSSE`)
-- [ ] Graceful error handling (error event, kapcsolat megszakadás)
-- [ ] Üzenet mentés stream befejezésekor
+- [ ] Graceful error handling (error event, connection drop)
+- [ ] Message persisted to DB on stream completion
 
-Elfogadási kritériumok:
-- Tokenek valós időben jelennek meg a UI-ban
-- Nincs teljes válasz pufferelés
-- Hálózati hiba esetén a UI hibát jelez, nem fagy be
-
----
-
-### Fázis 6 -- Frontend
-
-**Cél:** teljes, használható UI.
-
-Feladatok:
-- [ ] `ChatView`: üzenetlista + streaming megjelenítés + input
-- [ ] `SessionList`: sessionök listája, új session, törlés
-- [ ] `SourcesView`: forrás lista státusszal, URL hozzáadás, törlés
-- [ ] Source selection a chat indításakor
-- [ ] Loading states, skeleton loaderek
-- [ ] Error states, user-friendly hibaüzenetek
-- [ ] Source citation megjelenítés az assistant üzenetekben
-- [ ] Reszponzív layout (desktop-first, de mobilon is működik)
+Acceptance criteria:
+- Tokens appear in real time in the UI
+- No full-response buffering on the backend
+- Network errors surface as a visible UI state, not a frozen screen
 
 ---
 
-### Fázis 7 -- Code quality és tesztelés
+### Phase 6 — Frontend
 
-**Cél:** production-ready minőség, teljes review.
+**Goal:** a complete, usable UI.
 
-Feladatok:
-- [ ] Pytest coverage: 80%+ backend (főleg services + api)
-- [ ] Vitest: useChat hook, useSSE hook, ChatInput, AddSourceForm
-- [ ] `ruff check` + `ruff format` -- minden fájl tiszta
-- [ ] `mypy --strict` -- 0 hiba
+Tasks:
+- [ ] `ChatView`: message list + streaming display + input
+- [ ] `SessionList`: session list, new session, delete
+- [ ] `SourcesView`: source list with status, add URL, delete
+- [ ] Source selection on session creation
+- [ ] Loading states, skeleton loaders
+- [ ] Error states with user-friendly messages
+- [ ] Source citation display in assistant messages
+- [ ] Responsive layout (desktop-first, functional on mobile)
+
+---
+
+### Phase 7 — Code Quality and Testing
+
+**Goal:** production-ready quality, full review.
+
+Tasks:
+- [ ] Pytest coverage: 80%+ backend (services + api)
+- [ ] Vitest: `useChat`, `useSSE` hooks, `ChatInput`, `AddSourceForm`
+- [ ] `ruff check` + `ruff format` — clean
+- [ ] `mypy --strict` — zero errors
 - [ ] Pre-commit hooks: ruff + mypy + pytest
-- [ ] Minden TODO és FIXME eltüntetve
-- [ ] README és DEVELOPMENT_SPEC final review
+- [ ] All TODOs and FIXMEs resolved
+- [ ] README and DEVELOPMENT_SPEC final review
 
 ---
 
-## Kódminőség szabályok
+## Code Quality Standards
 
 ### Python (backend)
 
-- Type hints minden publikus függvényen és metóduson
-- Függvény max 50 sor -- ha hosszabb, bonts szét
-- Fájl max 300 sor -- ha hosszabb, sub-modul kell
-- Minden endpoint-nak van `response_model`
-- Minden env var validálva startup-kor (pydantic-settings)
-- Logging: structlog (JSON), print() tilos
-- Saját exception osztályok a `app/exceptions.py`-ban
-- ORM nincs -- raw asyncpg query-k, jól elnevezett, komment nélkül
-- Async mindenütt ahol I/O van
+- Type hints on all public functions and methods
+- Max 50 lines per function — split at natural boundaries
+- Max 300 lines per file — use sub-modules
+- Every endpoint has a `response_model`
+- All env vars validated at startup via pydantic-settings
+- Structured logging (structlog, JSON format) — no `print()` statements
+- Domain-specific exceptions in `app/exceptions.py`, never bare `Exception`
+- No ORM — raw asyncpg queries, well-named, self-documenting
+- Async everywhere I/O is involved
 
 ### TypeScript (frontend)
 
-- `strict: true` a tsconfig-ban, `any` tilos
-- Komponens max 150 sor -- üzleti logika hookba kerül
-- Hook max 100 sor -- split ha kell
-- Minden API hívás typed, nincs implicit any response
-- CSS: csak TailwindCSS osztályok, inline style tilos
+- `strict: true` in tsconfig, no `any`
+- Max 150 lines per component — extract business logic into hooks
+- Max 100 lines per hook — split if needed
+- All API responses are typed, no implicit any
+- TailwindCSS only — no inline styles
 
 ---
 
-## Tesztelési stratégia
+## Testing Strategy
 
 ### Backend (Pytest)
 
 ```
 tests/
 ├── unit/
-│   ├── test_chunker.py         # Text splitter logika
+│   ├── test_chunker.py         # Text splitter logic
 │   ├── test_retrieval.py       # Retrieval service (mock DB)
 │   └── test_chat_service.py    # Prompt assembly, history truncation
 └── integration/
@@ -412,9 +415,9 @@ tests/
     └── conftest.py             # Test DB setup (real PostgreSQL)
 ```
 
-- Integrációs tesztek valódi test DB-t használnak (nem mock)
-- Ollama és Anthropic: mock (nem akarunk API hívást tesztekben)
-- Minden fázis végén futtatva: `pytest --cov=app --cov-report=term-missing`
+- Integration tests use a real test database, not mocks
+- Ollama and Anthropic are mocked in all tests
+- Run after each phase: `pytest --cov=app --cov-report=term-missing`
 
 ### Frontend (Vitest)
 
@@ -430,15 +433,15 @@ src/__tests__/
 
 ---
 
-## Döntések (lezárva 2026-10-07)
+## Decisions (locked 2026-10-07)
 
-1. **Pre-seeded dokumentációk**: Tailwind CSS + React + TypeScript docs. Demó adatként ezek kerülnek be alapból az indexelésbe.
+1. **Pre-seeded documentation**: Tailwind CSS + React + TypeScript docs. These will be indexed as demo data.
 
-2. **Session source selection**: Session indításakor kiválasztható melyik forrás(ok)ból keressen a rendszer. A `sessions.source_ids` tömb tartalmazza a kiválasztott forrásokat; üres tömb = nincs szűrés (összes forrás).
+2. **Session source selection**: Users can select which source(s) to search when starting a session. `sessions.source_ids` holds the selection; an empty array means search all sources.
 
 ---
 
-## Függőségek
+## Dependencies
 
 ### Backend (pyproject.toml)
 
@@ -466,7 +469,7 @@ dev = [
 ]
 ```
 
-### Frontend (package.json)
+### Frontend (package.json key deps)
 
 ```json
 {
@@ -486,9 +489,9 @@ dev = [
 
 ---
 
-## Változáskezelés
+## Spec Change Management
 
-Ha a specifikáció változik:
-1. Frissítsd a DEVELOPMENT_SPEC.md-t (jelöld mi változott és miért)
-2. Érintett fázisok elfogadási kritériumait is frissítsd
-3. Ha már kész kódot érint, nyiss egy újraírási feladatot -- ne patch-elj specen kívüli irányba
+If the specification changes:
+1. Update this file (note what changed and why)
+2. Update acceptance criteria for affected phases
+3. If already-written code is affected, open a rework task — do not silently drift from the spec
