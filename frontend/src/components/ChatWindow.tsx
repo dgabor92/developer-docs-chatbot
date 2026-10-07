@@ -23,7 +23,7 @@ export function ChatWindow({ sessionId }: Props) {
       .then(s => setMessages(s.messages))
       .catch(() => setMessages([]))
       .finally(() => setLoadingMessages(false))
-  }, [sessionId])
+  }, [sessionId, reset])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })

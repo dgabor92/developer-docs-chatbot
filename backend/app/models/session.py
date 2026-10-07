@@ -1,11 +1,11 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SessionCreate(BaseModel):
-    source_ids: list[UUID] = []
+    source_ids: list[UUID] = Field(default_factory=list, max_length=50)
 
 
 class SessionResponse(BaseModel):
@@ -23,7 +23,7 @@ class SourceCitation(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    content: str
+    content: str = Field(min_length=1, max_length=8000)
 
 
 class MessageResponse(BaseModel):

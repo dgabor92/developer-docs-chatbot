@@ -73,6 +73,19 @@ async def update_source_status(
         )
 
 
+async def set_source_indexing_if_idle(source_id: UUID) -> bool:
+    """Atomically set status to 'indexing' only if not already indexing.
+
+    Returns True if the update succeeded (i.e. source was idle), False if it was already indexing.
+    """
+    pool = get_pool()
+    result = await pool.execute(
+        "UPDATE sources SET status='indexing', updated_at=now() WHERE id=$1 AND status != 'indexing'",
+        source_id,
+    )
+    return result == 'UPDATE 1'
+
+
 async def delete_source(source_id: UUID) -> bool:
     pool = get_pool()
     result = await pool.execute('DELETE FROM sources WHERE id = $1', source_id)

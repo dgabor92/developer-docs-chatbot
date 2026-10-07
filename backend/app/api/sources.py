@@ -4,6 +4,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from app.db import sources as sources_db
+from app.db.sources import set_source_indexing_if_idle
 from app.models.source import SourceCreate, SourceResponse
 from app.services.ingestion import ingestion_service
 
@@ -66,13 +67,13 @@ async def reindex_source(
     if not source:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Source not found')
 
-    if source['status'] == 'indexing':
+    started = await set_source_indexing_if_idle(source_id)
+    if not started:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail='Source is already being indexed',
         )
 
-    await sources_db.update_source_status(source_id, 'indexing')
     background_tasks.add_task(
         ingestion_service.ingest_source,
         source['id'],

@@ -20,7 +20,10 @@ class OllamaClient:
                 json={'model': self._model, 'prompt': text},
             )
             response.raise_for_status()
-            return response.json()['embedding']  # type: ignore[no-any-return]
+            data = response.json()
+            if 'embedding' not in data:
+                raise EmbeddingError(f'Ollama response missing embedding field: {list(data.keys())}')
+            return data['embedding']  # type: ignore[no-any-return]
         except httpx.HTTPError as e:
             logger.error('ollama_embed_failed', error=str(e))
             raise EmbeddingError(f'Failed to generate embedding: {e}') from e

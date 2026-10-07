@@ -38,11 +38,14 @@ export function SourcesPanel({ onSessionCreated }: Props) {
 
   useEffect(() => {
     loadSources()
-    const interval = setInterval(() => {
-      if (sources.some(s => s.status === 'indexing')) loadSources()
-    }, 3000)
+  }, [])
+
+  useEffect(() => {
+    const hasIndexing = sources.some(s => s.status === 'indexing')
+    if (!hasIndexing) return
+    const interval = setInterval(loadSources, 3000)
     return () => clearInterval(interval)
-  }, [sources.length])
+  }, [sources])
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()

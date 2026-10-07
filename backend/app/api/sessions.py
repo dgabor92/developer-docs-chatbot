@@ -92,6 +92,6 @@ async def send_message(session_id: UUID, body: MessageCreate) -> StreamingRespon
                 yield _sse_event(event, data)
         except (ChatError, RetrievalError) as e:
             logger.error('stream_error', session_id=str(session_id), error=str(e))
-            yield _sse_event('error', {'message': str(e)})
+            yield _sse_event('error', {'message': 'An error occurred while processing your request.'})
 
     return StreamingResponse(generate(), media_type='text/event-stream')

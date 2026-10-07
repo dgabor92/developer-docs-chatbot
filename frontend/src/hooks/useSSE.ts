@@ -29,7 +29,7 @@ export function useSSE(sessionId: string) {
       setState({ streaming: true, tokens: '', sources: [], error: null })
 
       try {
-        const res = await sendMessageStream(sessionId, content)
+        const res = await sendMessageStream(sessionId, content, controller.signal)
 
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`)
@@ -39,27 +39,33 @@ export function useSSE(sessionId: string) {
         const decoder = new TextDecoder()
         let buffer = ''
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
 
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
 
-          let currentEvent = ''
-          for (const line of lines) {
-            if (line.startsWith('event: ')) {
-              currentEvent = line.slice(7)
-            } else if (line.startsWith('data: ')) {
-              const parsed = JSON.parse(line.slice(6)) as SSEEvent['data']
-              handleEvent(currentEvent, parsed, onDone)
+            let currentEvent = ''
+            for (const line of lines) {
+              if (line.startsWith('event: ')) {
+                currentEvent = line.slice(7)
+              } else if (line.startsWith('data: ')) {
+                const parsed = JSON.parse(line.slice(6)) as SSEEvent['data']
+                handleEvent(currentEvent, parsed, onDone)
+              }
             }
           }
+        } finally {
+          reader.cancel()
         }
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
           setState(s => ({ ...s, error: (err as Error).message, streaming: false }))
+        } else {
+          setState(s => ({ ...s, streaming: false }))
         }
       }
     },

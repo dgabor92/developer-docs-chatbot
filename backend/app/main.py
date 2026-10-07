@@ -11,6 +11,7 @@ from app.api import health, sessions, sources
 from app.clients.ollama import ollama_client
 from app.config import settings
 from app.db.connection import close_db_pool, init_db_pool
+from app.db.migrate import run_migrations
 
 
 def configure_logging() -> None:
@@ -33,6 +34,7 @@ def configure_logging() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger = structlog.get_logger()
+    await run_migrations()
     await init_db_pool()
     logger.info('startup_complete', environment=settings.environment)
     yield
@@ -54,8 +56,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=['*'],
-        allow_headers=['*'],
+        allow_methods=['GET', 'POST', 'DELETE'],
+        allow_headers=['Content-Type'],
     )
 
     app.include_router(health.router, prefix='/api')

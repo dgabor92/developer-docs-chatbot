@@ -38,11 +38,12 @@ async def run_migrations() -> None:
                 continue
 
             sql = migration_file.read_text()
-            await conn.execute(sql)
-            await conn.execute(
-                'INSERT INTO schema_migrations (version) VALUES ($1)',
-                version,
-            )
+            async with conn.transaction():
+                await conn.execute(sql)
+                await conn.execute(
+                    'INSERT INTO schema_migrations (version) VALUES ($1)',
+                    version,
+                )
             logger.info('migration_applied', version=version)
 
     finally:

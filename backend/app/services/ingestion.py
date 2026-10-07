@@ -1,5 +1,7 @@
 import asyncio
+import ipaddress
 import re
+from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 from uuid import UUID
@@ -178,39 +180,79 @@ class IngestionService:
 
         except Exception as e:
             log.error('ingestion_failed', error=str(e))
-            await sources_db.update_source_status(source_id, 'error', error_msg=str(e))
+            # Use a generic message for the client to avoid leaking internal details
+            await sources_db.update_source_status(source_id, 'error', error_msg='Ingestion failed')
+
+    @staticmethod
+    def _is_safe_redirect(url: str) -> bool:
+        """Return False if the URL points to a private/loopback address."""
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or '').lower()
+        if hostname in ('localhost', '0.0.0.0', ''):
+            return False
+        try:
+            addr = ipaddress.ip_address(hostname)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_unspecified:
+                return False
+        except ValueError:
+            pass
+        return True
 
     async def _crawl(self, base_url: str) -> list[ScrapedPage]:
         visited: set[str] = set()
-        queue = [base_url]
+        queued: set[str] = {base_url}
+        queue: deque[str] = deque([base_url])
         pages: list[ScrapedPage] = []
 
         async with httpx.AsyncClient(
             timeout=10.0,
             headers={'User-Agent': _USER_AGENT},
-            follow_redirects=True,
+            follow_redirects=False,
         ) as client:
             while queue and len(visited) < MAX_PAGES:
-                url = queue.pop(0)
+                url = queue.popleft()
                 if url in visited:
                     continue
                 visited.add(url)
 
-                try:
-                    response = await client.get(url)
-                    response.raise_for_status()
-                except httpx.HTTPError as e:
-                    logger.warning('crawl_fetch_failed', url=url, error=str(e))
+                # Handle redirects manually to guard against SSRF via redirect chains
+                current_url = url
+                for _ in range(5):
+                    try:
+                        response = await client.get(current_url)
+                    except httpx.HTTPError as e:
+                        logger.warning('crawl_fetch_failed', url=current_url, error=str(e))
+                        response = None
+                        break
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get('location', '')
+                        next_url = urljoin(current_url, location).split('#')[0]
+                        if not self._is_safe_redirect(next_url):
+                            logger.warning('crawl_redirect_blocked', url=current_url, target=next_url)
+                            response = None
+                            break
+                        current_url = next_url
+                    else:
+                        break
+
+                if response is None:
                     continue
 
-                page = self._scraper._parse(url, response.text)
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    logger.warning('crawl_fetch_failed', url=current_url, error=str(e))
+                    continue
+
+                page = self._scraper._parse(current_url, response.text)
                 if page:
                     pages.append(page)
-                    logger.info('page_indexed', url=url, chars=len(page.content))
+                    logger.info('page_indexed', url=current_url, chars=len(page.content))
 
                 new_links = self._scraper.extract_links(base_url, response.text)
                 for link in new_links:
-                    if link not in visited and link not in queue:
+                    if link not in visited and link not in queued:
+                        queued.add(link)
                         queue.append(link)
 
                 await asyncio.sleep(CRAWL_DELAY)

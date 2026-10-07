@@ -20,10 +20,15 @@ export function deleteSession(id: string): Promise<void> {
   return apiFetch(`/sessions/${id}`, { method: 'DELETE' })
 }
 
-export function sendMessageStream(sessionId: string, content: string): Promise<Response> {
+export function sendMessageStream(
+  sessionId: string,
+  content: string,
+  signal?: AbortSignal,
+): Promise<Response> {
   return fetch(`/api/sessions/${sessionId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
+    signal,
   })
 }
