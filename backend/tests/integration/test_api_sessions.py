@@ -2,7 +2,7 @@
 import pytest
 from httpx import AsyncClient
 
-MOCK_RESPONSE = 'This is a helpful answer about the documentation.'
+from tests.integration.conftest import MOCK_RESPONSE, parse_sse
 
 
 @pytest.mark.asyncio
@@ -82,16 +82,27 @@ async def test_send_message_full_rag_pipeline(
         json={'content': 'How do I install Tailwind CSS?'},
     )
     assert response.status_code == 200
-    data = response.json()
-    assert data['role'] == 'assistant'
-    assert data['content'] == MOCK_RESPONSE
-    assert data['session_id'] == session_id
+    assert 'text/event-stream' in response.headers['content-type']
+
+    events = parse_sse(response.text)
+    event_types = [e['event'] for e in events]
+    assert 'token' in event_types
+    assert 'sources' in event_types
+    assert 'done' in event_types
+
+    token_events = [e for e in events if e['event'] == 'token']
+    full_content = ''.join(e['data']['content'] for e in token_events)
+    assert full_content == MOCK_RESPONSE
+
+    done_event = next(e for e in events if e['event'] == 'done')
+    assert done_event['data']['session_id'] == session_id
 
     session = await client.get(f'/api/sessions/{session_id}')
     messages = session.json()['messages']
     assert len(messages) == 2
     assert messages[0]['role'] == 'user'
     assert messages[1]['role'] == 'assistant'
+    assert messages[1]['content'] == MOCK_RESPONSE
 
     await client.delete(f'/api/sessions/{session_id}')
 
@@ -106,10 +117,13 @@ async def test_send_message_sets_session_title(
     session_id = create.json()['id']
 
     question = 'How do I configure dark mode in Tailwind?'
-    await client.post(
+    response = await client.post(
         f'/api/sessions/{session_id}/messages',
         json={'content': question},
     )
+    assert response.status_code == 200
+    # Consume the stream so the title write completes
+    assert any(e['event'] == 'done' for e in parse_sse(response.text))
 
     session = await client.get(f'/api/sessions/{session_id}')
     assert session.json()['title'] == question
@@ -135,14 +149,17 @@ async def test_multi_turn_conversation_persists_history(
     create = await client.post('/api/sessions', json={'source_ids': []})
     session_id = create.json()['id']
 
-    await client.post(
+    r1 = await client.post(
         f'/api/sessions/{session_id}/messages',
         json={'content': 'What is Tailwind CSS?'},
     )
-    await client.post(
+    assert any(e['event'] == 'done' for e in parse_sse(r1.text))
+
+    r2 = await client.post(
         f'/api/sessions/{session_id}/messages',
         json={'content': 'How do I add custom colors?'},
     )
+    assert any(e['event'] == 'done' for e in parse_sse(r2.text))
 
     session = await client.get(f'/api/sessions/{session_id}')
     messages = session.json()['messages']
@@ -165,10 +182,11 @@ async def test_session_deletion_cascades_to_messages(
     create = await client.post('/api/sessions', json={'source_ids': []})
     session_id = create.json()['id']
 
-    await client.post(
+    r = await client.post(
         f'/api/sessions/{session_id}/messages',
         json={'content': 'Test message'},
     )
+    assert any(e['event'] == 'done' for e in parse_sse(r.text))
 
     await client.delete(f'/api/sessions/{session_id}')
 

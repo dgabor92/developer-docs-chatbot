@@ -1,3 +1,4 @@
+import json
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 
@@ -8,7 +9,8 @@ from app.db.connection import close_db_pool, init_db_pool
 from app.main import app
 
 MOCK_EMBEDDING = [0.1] * 768
-MOCK_RESPONSE = 'This is a helpful answer about the documentation.'
+MOCK_TOKENS = ['This is ', 'a helpful ', 'answer about ', 'the documentation.']
+MOCK_RESPONSE = ''.join(MOCK_TOKENS)
 
 
 @pytest.fixture
@@ -34,6 +36,27 @@ def mock_ollama() -> AsyncGenerator[AsyncMock, None]:
 
 @pytest.fixture
 def mock_anthropic() -> AsyncGenerator[AsyncMock, None]:
+    async def _mock_stream(*args, **kwargs):
+        for token in MOCK_TOKENS:
+            yield token
+
     with patch('app.services.chat.anthropic_client') as mock:
-        mock.complete = AsyncMock(return_value=MOCK_RESPONSE)
+        mock.stream = _mock_stream
         yield mock
+
+
+def parse_sse(text: str) -> list[dict]:  # type: ignore[type-arg]
+    """Parse SSE response text into a list of {event, data} dicts."""
+    events = []
+    current: dict = {}  # type: ignore[type-arg]
+    for line in text.splitlines():
+        if line.startswith('event: '):
+            current['event'] = line[7:]
+        elif line.startswith('data: '):
+            current['data'] = json.loads(line[6:])
+        elif line == '' and current:
+            events.append(current)
+            current = {}
+    if current:
+        events.append(current)
+    return events

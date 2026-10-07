@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
 
@@ -87,6 +88,52 @@ class ChatService:
         )
 
         return dict(message) | {'sources': sources}
+
+
+    async def stream_message(
+        self,
+        session_id: UUID,
+        content: str,
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        session = await get_session(session_id)
+        source_ids = list(session['source_ids'] or []) if session else []
+
+        await create_message(session_id, 'user', content)
+
+        chunks = await retrieval_service.search(content, source_ids)
+        history = await list_messages(session_id)
+        messages = _truncate_history(history)
+
+        system = SYSTEM_PROMPT_TEMPLATE.format(context=_build_context(chunks))
+
+        full_text = ''
+        async for token in anthropic_client.stream(system, messages):
+            full_text += token
+            yield 'token', {'content': token}
+
+        sources = [
+            {'url': c.url, 'title': c.title, 'score': c.score}
+            for c in chunks
+        ]
+        yield 'sources', {'sources': sources}
+
+        message = await create_message(session_id, 'assistant', full_text, sources)
+
+        # history had 1 entry (the user msg we just saved) → first exchange
+        if len(history) == 1:
+            await update_session_title(session_id, content[:80])
+
+        logger.info(
+            'chat_message_streamed',
+            session_id=str(session_id),
+            chunks_used=len(chunks),
+            tokens=len(full_text),
+        )
+
+        yield 'done', {
+            'message_id': str(message['id']),
+            'session_id': str(session_id),
+        }
 
 
 chat_service = ChatService()

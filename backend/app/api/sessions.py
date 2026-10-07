@@ -1,8 +1,10 @@
 import json
+from collections.abc import AsyncIterator
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, HTTPException, status
+from starlette.responses import StreamingResponse
 
 from app.db.sessions import (
     create_session,
@@ -11,7 +13,7 @@ from app.db.sessions import (
     list_messages,
     list_sessions,
 )
-from app.exceptions import ChatError, NotFoundError, RetrievalError
+from app.exceptions import ChatError, RetrievalError
 from app.models.session import (
     MessageCreate,
     MessageResponse,
@@ -24,6 +26,10 @@ from app.services.chat import chat_service
 
 logger = structlog.get_logger()
 router = APIRouter(prefix='/sessions', tags=['sessions'])
+
+
+def _sse_event(event: str, data: dict) -> str:  # type: ignore[type-arg]
+    return f'event: {event}\ndata: {json.dumps(data)}\n\n'
 
 
 def _message_from_row(row: dict) -> MessageResponse:  # type: ignore[type-arg]
@@ -74,13 +80,18 @@ async def remove_session(session_id: UUID) -> None:
         raise HTTPException(status_code=404, detail='Session not found')
 
 
-@router.post('/{session_id}/messages', response_model=MessageResponse)
-async def send_message(session_id: UUID, body: MessageCreate) -> MessageResponse:
-    try:
-        row = await chat_service.send_message(session_id, body.content)
-    except NotFoundError:
+@router.post('/{session_id}/messages')
+async def send_message(session_id: UUID, body: MessageCreate) -> StreamingResponse:
+    session = await get_session(session_id)
+    if session is None:
         raise HTTPException(status_code=404, detail='Session not found')
-    except (ChatError, RetrievalError) as e:
-        logger.error('chat_error', session_id=str(session_id), error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-    return _message_from_row(row)
+
+    async def generate() -> AsyncIterator[str]:
+        try:
+            async for event, data in chat_service.stream_message(session_id, body.content):
+                yield _sse_event(event, data)
+        except (ChatError, RetrievalError) as e:
+            logger.error('stream_error', session_id=str(session_id), error=str(e))
+            yield _sse_event('error', {'message': str(e)})
+
+    return StreamingResponse(generate(), media_type='text/event-stream')

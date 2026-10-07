@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 import anthropic
 import structlog
 
@@ -28,6 +30,25 @@ class AnthropicClient:
             return response.content[0].text  # type: ignore[union-attr]
         except anthropic.APIError as e:
             logger.error('anthropic_api_error', error=str(e))
+            raise ChatError(f'Anthropic API error: {e}') from e
+
+    async def stream(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+        max_tokens: int = 2048,
+    ) -> AsyncIterator[str]:
+        try:
+            async with self._client.messages.stream(
+                model=self._model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=messages,  # type: ignore[arg-type]
+            ) as s:
+                async for text in s.text_stream:
+                    yield text
+        except anthropic.APIError as e:
+            logger.error('anthropic_stream_error', error=str(e))
             raise ChatError(f'Anthropic API error: {e}') from e
 
     def is_configured(self) -> bool:
