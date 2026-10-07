@@ -7,7 +7,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health
+from app.api import health, sources
 from app.config import settings
 from app.db.connection import close_db_pool, init_db_pool
 
@@ -57,6 +57,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router, prefix='/api')
+    app.include_router(sources.router, prefix='/api')
 
     return app
 
