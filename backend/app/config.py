@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Anthropic
     anthropic_api_key: str
-    llm_model: str = 'claude-haiku-4-5'
+    llm_model: str = 'claude-haiku-4-5-20251001'
 
     # App
     cors_origins: list[str] = ['http://localhost:5173', 'http://localhost:3000']

@@ -19,3 +19,11 @@ class IngestionError(AppError):
 
 class EmbeddingError(AppError):
     pass
+
+
+class RetrievalError(AppError):
+    pass
+
+
+class ChatError(AppError):
+    pass
