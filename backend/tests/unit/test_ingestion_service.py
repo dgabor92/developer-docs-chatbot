@@ -23,6 +23,7 @@ async def test_ingest_source_sets_error_status_on_embed_failure() -> None:
         patch('app.services.ingestion.sources_db') as mock_db,
         patch('app.services.ingestion.ollama_client') as mock_ollama,
         patch.object(service, '_crawl', new=AsyncMock(return_value=[fake_page])),
+        patch.object(service, '_is_safe_redirect', new=AsyncMock(return_value=True)),
     ):
         mock_db.update_source_status = AsyncMock()
         mock_db.delete_chunks_for_source = AsyncMock()
@@ -55,6 +56,7 @@ async def test_ingest_source_replaces_chunks_atomically() -> None:
         patch('app.services.ingestion.sources_db') as mock_db,
         patch('app.services.ingestion.ollama_client') as mock_ollama,
         patch.object(service, '_crawl', new=AsyncMock(return_value=[fake_page])),
+        patch.object(service, '_is_safe_redirect', new=AsyncMock(return_value=True)),
     ):
         mock_db.update_source_status = AsyncMock()
         mock_db.replace_chunks_for_source = AsyncMock()

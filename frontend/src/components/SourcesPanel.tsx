@@ -81,13 +81,25 @@ export function SourcesPanel({ onSessionCreated }: Props) {
   }
 
   async function handleDelete(id: string) {
-    await apiFetch(`/sources/${id}`, { method: 'DELETE' })
-    setSources(prev => prev.filter(s => s.id !== id))
+    try {
+      await apiFetch(`/sources/${id}`, { method: 'DELETE' })
+      setSources(prev => prev.filter(s => s.id !== id))
+    } catch {
+      setFormError('Failed to delete source.')
+    }
   }
 
   async function handleReindex(id: string) {
-    await apiFetch(`/sources/${id}/reindex`, { method: 'POST' })
-    loadSources()
+    try {
+      await apiFetch(`/sources/${id}/reindex`, { method: 'POST' })
+      loadSources()
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setFormError('Source is already being indexed.')
+      } else {
+        setFormError('Failed to start reindex.')
+      }
+    }
   }
 
   async function handleStartChat(sourceId: string) {

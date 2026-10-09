@@ -27,6 +27,8 @@ class AnthropicClient:
                 system=system,
                 messages=messages,  # type: ignore[arg-type]
             )
+            if not response.content:
+                raise ChatError("Anthropic returned an empty response (no content blocks)")
             return response.content[0].text  # type: ignore[union-attr]
         except anthropic.APIError as e:
             logger.error("anthropic_api_error", error=str(e))

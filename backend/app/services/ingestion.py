@@ -154,6 +154,10 @@ class IngestionService:
         await sources_db.update_source_status(source_id, "indexing")
 
         try:
+            # Guard the initial fetch URL against DNS rebinding (redirects are guarded separately)
+            if not await self._is_safe_redirect(base_url):
+                raise ValueError(f"base_url resolves to a private/loopback address: {base_url}")
+
             pages = await self._crawl(base_url)
             log.info("crawl_complete", pages=len(pages))
 
@@ -173,8 +177,13 @@ class IngestionService:
 
         except Exception as e:
             log.error("ingestion_failed", error=str(e))
-            # Use a generic message for the client to avoid leaking internal details
-            await sources_db.update_source_status(source_id, "error", error_msg="Ingestion failed")
+            # Best-effort — if DB is also down the source stays in 'indexing'
+            try:
+                await sources_db.update_source_status(
+                    source_id, "error", error_msg="Ingestion failed"
+                )
+            except Exception as db_err:
+                log.error("ingestion_status_update_failed", error=str(db_err))
 
     @staticmethod
     async def _is_safe_redirect(url: str) -> bool:

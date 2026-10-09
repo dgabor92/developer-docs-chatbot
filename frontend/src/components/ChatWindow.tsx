@@ -13,7 +13,13 @@ export function ChatWindow({ sessionId }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingMessages, setLoadingMessages] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const mountedRef = useRef(true)
   const { streaming, tokens, sources, error, sendMessage, reset } = useSSE(sessionId)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     setLoadingMessages(true)
@@ -41,7 +47,9 @@ export function ChatWindow({ sessionId }: Props) {
     setMessages(prev => [...prev, optimisticUser])
 
     sendMessage(content, () => {
-      getSession(sessionId).then(s => setMessages(s.messages))
+      getSession(sessionId).then(s => {
+        if (mountedRef.current) setMessages(s.messages)
+      })
     })
   }
 

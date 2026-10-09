@@ -81,4 +81,6 @@ async def reindex_source(
     )
 
     updated = await sources_db.get_source(source_id)
-    return SourceResponse(**updated)  # type: ignore[arg-type]
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
+    return SourceResponse(**updated)
