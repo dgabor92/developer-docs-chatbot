@@ -39,24 +39,16 @@ async def test_ingest_source_sets_error_status_on_embed_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ingest_source_deletes_chunks_before_inserting() -> None:
+async def test_ingest_source_replaces_chunks_atomically() -> None:
     from app.services.ingestion import IngestionService
 
     source_id = uuid4()
     service = IngestionService()
 
     fake_page = MagicMock()
-    fake_page.content = 'Short page.'
+    fake_page.content = 'Short page content for testing.'
     fake_page.url = 'https://docs.example.com/page'
     fake_page.title = 'Page'
-
-    call_order: list[str] = []
-
-    async def track_delete(*args, **kwargs):
-        call_order.append('delete')
-
-    async def track_insert(*args, **kwargs):
-        call_order.append('insert')
 
     with (
         patch('app.services.ingestion.sources_db') as mock_db,
@@ -64,11 +56,16 @@ async def test_ingest_source_deletes_chunks_before_inserting() -> None:
         patch.object(service, '_crawl', new=AsyncMock(return_value=[fake_page])),
     ):
         mock_db.update_source_status = AsyncMock()
-        mock_db.delete_chunks_for_source = AsyncMock(side_effect=track_delete)
-        mock_db.insert_chunk = AsyncMock(side_effect=track_insert)
+        mock_db.replace_chunks_for_source = AsyncMock()
         mock_ollama.embed = AsyncMock(return_value=[0.1] * 768)
 
         await service.ingest_source(source_id, 'https://docs.example.com/')
 
-    assert 'delete' in call_order
-    assert call_order.index('delete') < call_order.index('insert')
+    # replace_chunks_for_source must be called exactly once with the source_id
+    mock_db.replace_chunks_for_source.assert_called_once()
+    call_source_id, call_chunks = mock_db.replace_chunks_for_source.call_args.args
+    assert call_source_id == source_id
+    # Each chunk tuple is (url, title, content, embedding)
+    assert len(call_chunks) > 0
+    assert call_chunks[0][0] == fake_page.url
+    assert call_chunks[0][1] == fake_page.title

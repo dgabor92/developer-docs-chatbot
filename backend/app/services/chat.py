@@ -110,15 +110,15 @@ class ChatService:
             async for token in anthropic_client.stream(system, messages):
                 full_text += token
                 yield "token", {"content": token}
+
+            sources = [{"url": c.url, "title": c.title, "score": c.score} for c in chunks]
+            yield "sources", {"sources": sources}
+
+            message = await create_message(session_id, "assistant", full_text, sources)
         except Exception:
-            # Streaming failed — remove the orphan user message to keep history consistent
+            # Any failure after user message creation — clean up the orphan
             await delete_message(user_msg["id"])
             raise
-
-        sources = [{"url": c.url, "title": c.title, "score": c.score} for c in chunks]
-        yield "sources", {"sources": sources}
-
-        message = await create_message(session_id, "assistant", full_text, sources)
 
         if session["title"] is None:
             await update_session_title(session_id, content[:80])

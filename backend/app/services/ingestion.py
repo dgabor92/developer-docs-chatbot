@@ -156,23 +156,17 @@ class IngestionService:
             pages = await self._crawl(base_url)
             log.info("crawl_complete", pages=len(pages))
 
-            # Remove stale chunks before inserting new ones to avoid duplicates on reindex
-            await sources_db.delete_chunks_for_source(source_id)
-
-            total_chunks = 0
+            # Build all embeddings first (outside DB transaction to avoid long-held connections)
+            chunk_data: list[tuple[str, str | None, str, list[float]]] = []
             for page in pages:
-                chunks = self._chunker.split(page.content)
-                for chunk_text in chunks:
+                for chunk_text in self._chunker.split(page.content):
                     embedding = await ollama_client.embed(chunk_text)
-                    await sources_db.insert_chunk(
-                        source_id=source_id,
-                        url=page.url,
-                        title=page.title,
-                        content=chunk_text,
-                        embedding=embedding,
-                    )
-                    total_chunks += 1
+                    chunk_data.append((page.url, page.title, chunk_text, embedding))
 
+            # Atomically swap old chunks for new ones — concurrent reindex can't interleave
+            await sources_db.replace_chunks_for_source(source_id, chunk_data)
+
+            total_chunks = len(chunk_data)
             await sources_db.update_source_status(source_id, "ready", chunk_count=total_chunks)
             log.info("ingestion_complete", chunks=total_chunks)
 

@@ -53,8 +53,12 @@ export function useSSE(sessionId: string) {
               if (line.startsWith('event: ')) {
                 currentEvent = line.slice(7)
               } else if (line.startsWith('data: ')) {
-                const parsed = JSON.parse(line.slice(6)) as SSEEvent['data']
-                handleEvent(currentEvent, parsed, onDone)
+                try {
+                  const parsed = JSON.parse(line.slice(6)) as SSEEvent['data']
+                  handleEvent(currentEvent, parsed, onDone)
+                } catch {
+                  // malformed frame — skip and continue the stream
+                }
               }
             }
           }

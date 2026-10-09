@@ -13,7 +13,6 @@ from app.db.sessions import (
     list_messages,
     list_sessions,
 )
-from app.exceptions import ChatError, RetrievalError
 from app.models.session import (
     MessageCreate,
     MessageResponse,
@@ -90,7 +89,7 @@ async def send_message(session_id: UUID, body: MessageCreate) -> StreamingRespon
         try:
             async for event, data in chat_service.stream_message(session_id, body.content):
                 yield _sse_event(event, data)
-        except (ChatError, RetrievalError) as e:
+        except Exception as e:
             logger.error("stream_error", session_id=str(session_id), error=str(e))
             msg = "An error occurred while processing your request."
             yield _sse_event("error", {"message": msg})

@@ -123,3 +123,30 @@ async def insert_chunk(
         token_count,
         embedding_str,
     )
+
+
+async def replace_chunks_for_source(
+    source_id: UUID,
+    chunks: list[tuple[str, str | None, str, list[float]]],
+) -> None:
+    """Atomically delete all existing chunks and insert the new ones in a single transaction."""
+    pool = get_pool()
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute("DELETE FROM chunks WHERE source_id = $1", source_id)
+        for url, title, content, embedding in chunks:
+            if not all(math.isfinite(f) for f in embedding):
+                raise EmbeddingError(f"Embedding for {url} contains non-finite values (NaN/Inf)")
+            embedding_str = "[" + ",".join(str(f) for f in embedding) + "]"
+            token_count = len(content) // 4
+            await conn.execute(
+                """
+                INSERT INTO chunks (source_id, url, title, content, token_count, embedding)
+                VALUES ($1, $2, $3, $4, $5, $6::vector)
+                """,
+                source_id,
+                url,
+                title,
+                content,
+                token_count,
+                embedding_str,
+            )
