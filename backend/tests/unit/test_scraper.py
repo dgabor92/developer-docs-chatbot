@@ -1,3 +1,6 @@
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
 import pytest
 
 from app.services.ingestion import PageScraper
@@ -102,3 +105,46 @@ def test_extract_links_deduplicates(scraper: PageScraper) -> None:
     """
     links = scraper.extract_links('https://example.com/docs', html)
     assert len(links) == len(set(links))
+
+
+# ── scrape_page ───────────────────────────────────────────────────────────────
+
+async def test_scrape_page_success(scraper: PageScraper) -> None:
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.text = FULL_PAGE_HTML
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    page = await scraper.scrape_page('https://example.com/docs', mock_client)
+    assert page is not None
+    assert page.title == 'Installation'
+
+
+async def test_scrape_page_http_error_returns_none(scraper: PageScraper) -> None:
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=httpx.HTTPError('connection timeout'))
+
+    page = await scraper.scrape_page('https://example.com/docs', mock_client)
+    assert page is None
+
+
+# ── _parse edge branches ──────────────────────────────────────────────────────
+
+def test_parse_uses_title_tag_when_no_h1(scraper: PageScraper) -> None:
+    html = """
+    <html><head><title>Page From Title Tag</title></head>
+    <body><main>
+      <p>This is a sufficiently long paragraph of documentation content that passes the one hundred character minimum threshold for content extraction.</p>
+    </main></body></html>
+    """
+    page = scraper._parse('https://example.com', html)
+    assert page is not None
+    assert page.title == 'Page From Title Tag'
+
+
+def test_parse_returns_none_when_no_body(scraper: PageScraper) -> None:
+    html = '<html></html>'
+    page = scraper._parse('https://example.com', html)
+    assert page is None
