@@ -1,6 +1,7 @@
 import asyncio
 import ipaddress
 import re
+import socket
 from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
@@ -176,18 +177,21 @@ class IngestionService:
             await sources_db.update_source_status(source_id, "error", error_msg="Ingestion failed")
 
     @staticmethod
-    def _is_safe_redirect(url: str) -> bool:
-        """Return False if the URL points to a private/loopback address."""
+    async def _is_safe_redirect(url: str) -> bool:
+        """Return False if the URL points to a private/loopback address (DNS-resolved)."""
         parsed = urlparse(url)
         hostname = (parsed.hostname or "").lower()
         if hostname in ("localhost", "0.0.0.0", ""):
             return False
         try:
-            addr = ipaddress.ip_address(hostname)
-            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_unspecified:
-                return False
-        except ValueError:
-            pass
+            # Resolve the hostname to catch DNS rebinding attacks
+            infos = await asyncio.to_thread(socket.getaddrinfo, hostname, None)
+            for info in infos:
+                addr = ipaddress.ip_address(info[4][0])
+                if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_unspecified:
+                    return False
+        except (OSError, ValueError):
+            return False  # unresolvable hostname → block
         return True
 
     async def _crawl(self, base_url: str) -> list[ScrapedPage]:
@@ -219,7 +223,7 @@ class IngestionService:
                     if fetch.status_code in (301, 302, 303, 307, 308):
                         location = fetch.headers.get("location", "")
                         next_url = urljoin(current_url, location).split("#")[0]
-                        if not self._is_safe_redirect(next_url):
+                        if not await self._is_safe_redirect(next_url):
                             logger.warning(
                                 "crawl_redirect_blocked", url=current_url, target=next_url
                             )

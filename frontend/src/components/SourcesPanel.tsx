@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Session } from '../types/session'
 import { ApiError } from '../api/client'
 import { createSession } from '../api/sessions'
@@ -31,13 +31,21 @@ export function SourcesPanel({ onSessionCreated }: Props) {
   const [url, setUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const pollAbortRef = useRef<AbortController | null>(null)
 
   function loadSources() {
-    apiFetch<SourceRow[]>('/sources').then(setSources).finally(() => setLoading(false))
+    pollAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    pollAbortRef.current = ctrl
+    apiFetch<SourceRow[]>('/sources', { signal: ctrl.signal })
+      .then(setSources)
+      .catch(err => { if ((err as Error).name !== 'AbortError') throw err })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => {
     loadSources()
+    return () => pollAbortRef.current?.abort()
   }, [])
 
   useEffect(() => {

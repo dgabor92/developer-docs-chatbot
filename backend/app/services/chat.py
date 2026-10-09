@@ -52,40 +52,6 @@ def _truncate_history(
 
 
 class ChatService:
-    async def send_message(
-        self,
-        session_id: UUID,
-        content: str,
-    ) -> dict[str, Any]:
-        session = await get_session(session_id)
-        if session is None:
-            raise NotFoundError("session", str(session_id))
-
-        await create_message(session_id, "user", content)
-
-        source_ids = list(session["source_ids"] or [])
-        chunks = await retrieval_service.search(content, source_ids)
-
-        history = await list_messages(session_id)
-        messages = _truncate_history(history)
-
-        system = SYSTEM_PROMPT_TEMPLATE.format(context=_build_context(chunks))
-        response_text = await anthropic_client.complete(system, messages)
-
-        sources = [{"url": c.url, "title": c.title, "score": c.score} for c in chunks]
-        message = await create_message(session_id, "assistant", response_text, sources)
-
-        if session["title"] is None:
-            await update_session_title(session_id, content[:80])
-
-        logger.info(
-            "chat_message_sent",
-            session_id=str(session_id),
-            chunks_used=len(chunks),
-        )
-
-        return dict(message) | {"sources": sources}
-
     async def stream_message(
         self,
         session_id: UUID,
