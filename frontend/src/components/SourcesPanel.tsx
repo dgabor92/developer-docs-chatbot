@@ -111,7 +111,7 @@ export function SourcesPanel({ onSessionCreated }: Props) {
           />
           <button
             type='submit'
-            disabled={submitting}
+            disabled={submitting || !name.trim() || !url.trim()}
             className='rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50'
           >
             {submitting ? 'Adding...' : 'Add'}
