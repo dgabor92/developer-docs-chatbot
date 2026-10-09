@@ -1,0 +1,37 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff lint
+        entry: backend/.venv/bin/ruff check backend/app
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: ruff-format
+        name: ruff format
+        entry: backend/.venv/bin/ruff format --check backend/app
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: mypy
+        name: mypy
+        entry: bash -c 'cd backend && .venv/bin/mypy app'
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: pytest-unit
+        name: pytest unit tests
+        entry: bash -c 'cd backend && .venv/bin/pytest tests/unit/ -q'
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: tsc
+        name: typescript check
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        pass_filenames: false
+        types_or: [ts, tsx]

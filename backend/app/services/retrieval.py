@@ -28,12 +28,12 @@ class RetrievalService:
         try:
             embedding = await ollama_client.embed(query)
         except EmbeddingError as e:
-            raise RetrievalError(f'Failed to embed query: {e}') from e
+            raise RetrievalError(f"Failed to embed query: {e}") from e
 
         rows = await search_chunks(embedding, source_ids, top_k)
 
         logger.info(
-            'retrieval_search_done',
+            "retrieval_search_done",
             query_length=len(query),
             chunks_found=len(rows),
             filtered_by_sources=bool(source_ids),
@@ -41,10 +41,10 @@ class RetrievalService:
 
         return [
             ChunkResult(
-                url=row['url'],
-                title=row['title'],
-                content=row['content'],
-                score=float(row['score']),
+                url=row["url"],
+                title=row["title"],
+                content=row["content"],
+                score=float(row["score"]),
             )
             for row in rows
         ]

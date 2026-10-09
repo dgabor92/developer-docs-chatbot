@@ -34,7 +34,8 @@ async def test_ingest_source_sets_error_status_on_embed_failure() -> None:
     calls = mock_db.update_source_status.call_args_list
     assert calls[0].args == (source_id, 'indexing')
     assert calls[1].args[1] == 'error'
-    assert 'Ollama timed out' in calls[1].kwargs.get('error_msg', calls[1].args[2] if len(calls[1].args) > 2 else '')
+    # Error message is intentionally generic to avoid leaking internal details
+    assert calls[1].kwargs.get('error_msg') == 'Ingestion failed'
 
 
 @pytest.mark.asyncio

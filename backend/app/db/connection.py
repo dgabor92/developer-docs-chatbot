@@ -15,7 +15,7 @@ async def init_db_pool() -> None:
         min_size=2,
         max_size=10,
     )
-    logger.info('db_pool_initialized')
+    logger.info("db_pool_initialized")
 
 
 async def close_db_pool() -> None:
@@ -23,10 +23,10 @@ async def close_db_pool() -> None:
     if _pool is not None:
         await _pool.close()
         _pool = None
-        logger.info('db_pool_closed')
+        logger.info("db_pool_closed")
 
 
 def get_pool() -> asyncpg.Pool:
     if _pool is None:
-        raise RuntimeError('Database pool is not initialized')
+        raise RuntimeError("Database pool is not initialized")
     return _pool

@@ -20,7 +20,7 @@ CHUNK_SIZE = 2000  # ~500 tokens at ~4 chars/token
 CHUNK_OVERLAP = 200  # ~50 tokens
 CRAWL_DELAY = 0.15  # seconds between requests
 
-_USER_AGENT = 'Mozilla/5.0 (compatible; developer-docs-chatbot/1.0)'
+_USER_AGENT = "Mozilla/5.0 (compatible; developer-docs-chatbot/1.0)"
 
 
 @dataclass
@@ -40,7 +40,7 @@ class TextChunker:
         self.chunk_overlap = chunk_overlap
 
     def split(self, text: str) -> list[str]:
-        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
         if not text:
             return []
         if len(text) <= self.chunk_size:
@@ -67,7 +67,7 @@ class TextChunker:
     def _find_break(self, text: str, start: int, end: int) -> int:
         mid = start + (self.chunk_size // 2)
 
-        for sep in ('\n\n', '\n', '. ', ' '):
+        for sep in ("\n\n", "\n", ". ", " "):
             pos = text.rfind(sep, mid, end)
             if pos > mid:
                 return pos + len(sep)
@@ -84,36 +84,36 @@ class PageScraper:
             response = await client.get(url)
             response.raise_for_status()
         except httpx.HTTPError as e:
-            logger.warning('page_fetch_failed', url=url, error=str(e))
+            logger.warning("page_fetch_failed", url=url, error=str(e))
             return None
 
         return self._parse(url, response.text)
 
     def _parse(self, url: str, html: str) -> ScrapedPage | None:
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
 
-        for tag in soup(['script', 'style', 'nav', 'footer', 'aside', 'header']):
+        for tag in soup(["script", "style", "nav", "footer", "aside", "header"]):
             tag.decompose()
 
-        title = ''
-        h1 = soup.find('h1')
+        title = ""
+        h1 = soup.find("h1")
         if h1:
             title = h1.get_text(strip=True)
         elif soup.title:
             title = soup.title.get_text(strip=True)
 
         main = (
-            soup.find('main')
-            or soup.find('article')
-            or soup.find(id='content')
-            or soup.find(class_='content')
+            soup.find("main")
+            or soup.find("article")
+            or soup.find(id="content")
+            or soup.find(class_="content")
             or soup.body
         )
         if not main:
             return None
 
-        content = main.get_text(separator='\n', strip=True)
-        content = re.sub(r'\n{3,}', '\n\n', content).strip()
+        content = main.get_text(separator="\n", strip=True)
+        content = re.sub(r"\n{3,}", "\n\n", content).strip()
 
         if len(content) < 100:
             return None
@@ -121,18 +121,18 @@ class PageScraper:
         return ScrapedPage(url=url, title=title, content=content)
 
     def extract_links(self, base_url: str, html: str) -> list[str]:
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
         parsed_base = urlparse(base_url)
         seen: set[str] = set()
         links: list[str] = []
 
-        for a in soup.find_all('a', href=True):
-            href = str(a.get('href', ''))
-            full_url = urljoin(base_url, href).split('#')[0]
+        for a in soup.find_all("a", href=True):
+            href = str(a.get("href", ""))
+            full_url = urljoin(base_url, href).split("#")[0]
             parsed = urlparse(full_url)
 
             if (
-                parsed.scheme in ('http', 'https')
+                parsed.scheme in ("http", "https")
                 and parsed.netloc == parsed_base.netloc
                 and parsed.path.startswith(parsed_base.path)
                 and full_url not in seen
@@ -150,11 +150,11 @@ class IngestionService:
 
     async def ingest_source(self, source_id: UUID, base_url: str) -> None:
         log = logger.bind(source_id=str(source_id), base_url=base_url)
-        await sources_db.update_source_status(source_id, 'indexing')
+        await sources_db.update_source_status(source_id, "indexing")
 
         try:
             pages = await self._crawl(base_url)
-            log.info('crawl_complete', pages=len(pages))
+            log.info("crawl_complete", pages=len(pages))
 
             # Remove stale chunks before inserting new ones to avoid duplicates on reindex
             await sources_db.delete_chunks_for_source(source_id)
@@ -173,22 +173,20 @@ class IngestionService:
                     )
                     total_chunks += 1
 
-            await sources_db.update_source_status(
-                source_id, 'ready', chunk_count=total_chunks
-            )
-            log.info('ingestion_complete', chunks=total_chunks)
+            await sources_db.update_source_status(source_id, "ready", chunk_count=total_chunks)
+            log.info("ingestion_complete", chunks=total_chunks)
 
         except Exception as e:
-            log.error('ingestion_failed', error=str(e))
+            log.error("ingestion_failed", error=str(e))
             # Use a generic message for the client to avoid leaking internal details
-            await sources_db.update_source_status(source_id, 'error', error_msg='Ingestion failed')
+            await sources_db.update_source_status(source_id, "error", error_msg="Ingestion failed")
 
     @staticmethod
     def _is_safe_redirect(url: str) -> bool:
         """Return False if the URL points to a private/loopback address."""
         parsed = urlparse(url)
-        hostname = (parsed.hostname or '').lower()
-        if hostname in ('localhost', '0.0.0.0', ''):
+        hostname = (parsed.hostname or "").lower()
+        if hostname in ("localhost", "0.0.0.0", ""):
             return False
         try:
             addr = ipaddress.ip_address(hostname)
@@ -206,7 +204,7 @@ class IngestionService:
 
         async with httpx.AsyncClient(
             timeout=10.0,
-            headers={'User-Agent': _USER_AGENT},
+            headers={"User-Agent": _USER_AGENT},
             follow_redirects=False,
         ) as client:
             while queue and len(visited) < MAX_PAGES:
@@ -217,22 +215,24 @@ class IngestionService:
 
                 # Handle redirects manually to guard against SSRF via redirect chains
                 current_url = url
+                response: httpx.Response | None = None
                 for _ in range(5):
                     try:
-                        response = await client.get(current_url)
+                        fetch = await client.get(current_url)
                     except httpx.HTTPError as e:
-                        logger.warning('crawl_fetch_failed', url=current_url, error=str(e))
-                        response = None
+                        logger.warning("crawl_fetch_failed", url=current_url, error=str(e))
                         break
-                    if response.status_code in (301, 302, 303, 307, 308):
-                        location = response.headers.get('location', '')
-                        next_url = urljoin(current_url, location).split('#')[0]
+                    if fetch.status_code in (301, 302, 303, 307, 308):
+                        location = fetch.headers.get("location", "")
+                        next_url = urljoin(current_url, location).split("#")[0]
                         if not self._is_safe_redirect(next_url):
-                            logger.warning('crawl_redirect_blocked', url=current_url, target=next_url)
-                            response = None
+                            logger.warning(
+                                "crawl_redirect_blocked", url=current_url, target=next_url
+                            )
                             break
                         current_url = next_url
                     else:
+                        response = fetch
                         break
 
                 if response is None:
@@ -241,13 +241,13 @@ class IngestionService:
                 try:
                     response.raise_for_status()
                 except httpx.HTTPStatusError as e:
-                    logger.warning('crawl_fetch_failed', url=current_url, error=str(e))
+                    logger.warning("crawl_fetch_failed", url=current_url, error=str(e))
                     continue
 
                 page = self._scraper._parse(current_url, response.text)
                 if page:
                     pages.append(page)
-                    logger.info('page_indexed', url=current_url, chars=len(page.content))
+                    logger.info("page_indexed", url=current_url, chars=len(page.content))
 
                 new_links = self._scraper.extract_links(base_url, response.text)
                 for link in new_links:

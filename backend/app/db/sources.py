@@ -26,19 +26,19 @@ async def create_source(
         base_url,
         description,
     )
-    return dict(row)  # type: ignore[arg-type]
+    return dict(row)
 
 
 async def get_source(source_id: UUID) -> dict[str, Any] | None:
     pool = get_pool()
-    row = await pool.fetchrow('SELECT * FROM sources WHERE id = $1', source_id)
-    return dict(row) if row else None  # type: ignore[arg-type]
+    row = await pool.fetchrow("SELECT * FROM sources WHERE id = $1", source_id)
+    return dict(row) if row else None
 
 
 async def list_sources() -> list[dict[str, Any]]:
     pool = get_pool()
-    rows = await pool.fetch('SELECT * FROM sources ORDER BY created_at DESC')
-    return [dict(row) for row in rows]  # type: ignore[arg-type]
+    rows = await pool.fetch("SELECT * FROM sources ORDER BY created_at DESC")
+    return [dict(row) for row in rows]
 
 
 async def update_source_status(
@@ -79,22 +79,23 @@ async def set_source_indexing_if_idle(source_id: UUID) -> bool:
     Returns True if the update succeeded (i.e. source was idle), False if it was already indexing.
     """
     pool = get_pool()
-    result = await pool.execute(
-        "UPDATE sources SET status='indexing', updated_at=now() WHERE id=$1 AND status != 'indexing'",
-        source_id,
+    sql = (
+        "UPDATE sources SET status='indexing', updated_at=now()"
+        " WHERE id=$1 AND status != 'indexing'"
     )
-    return result == 'UPDATE 1'
+    result = await pool.execute(sql, source_id)
+    return str(result) == "UPDATE 1"
 
 
 async def delete_source(source_id: UUID) -> bool:
     pool = get_pool()
-    result = await pool.execute('DELETE FROM sources WHERE id = $1', source_id)
-    return result == 'DELETE 1'
+    result = await pool.execute("DELETE FROM sources WHERE id = $1", source_id)
+    return str(result) == "DELETE 1"
 
 
 async def delete_chunks_for_source(source_id: UUID) -> None:
     pool = get_pool()
-    await pool.execute('DELETE FROM chunks WHERE source_id = $1', source_id)
+    await pool.execute("DELETE FROM chunks WHERE source_id = $1", source_id)
 
 
 async def insert_chunk(
@@ -105,10 +106,10 @@ async def insert_chunk(
     embedding: list[float],
 ) -> None:
     if not all(math.isfinite(f) for f in embedding):
-        raise EmbeddingError(f'Embedding for {url} contains non-finite values (NaN/Inf)')
+        raise EmbeddingError(f"Embedding for {url} contains non-finite values (NaN/Inf)")
 
     pool = get_pool()
-    embedding_str = '[' + ','.join(str(f) for f in embedding) + ']'
+    embedding_str = "[" + ",".join(str(f) for f in embedding) + "]"
     token_count = len(content) // 4
     await pool.execute(
         """

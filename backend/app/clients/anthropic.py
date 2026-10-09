@@ -29,8 +29,8 @@ class AnthropicClient:
             )
             return response.content[0].text  # type: ignore[union-attr]
         except anthropic.APIError as e:
-            logger.error('anthropic_api_error', error=str(e))
-            raise ChatError(f'Anthropic API error: {e}') from e
+            logger.error("anthropic_api_error", error=str(e))
+            raise ChatError(f"Anthropic API error: {e}") from e
 
     async def stream(
         self,
@@ -48,12 +48,12 @@ class AnthropicClient:
                 async for text in s.text_stream:
                     yield text
         except anthropic.APIError as e:
-            logger.error('anthropic_stream_error', error=str(e))
-            raise ChatError(f'Anthropic API error: {e}') from e
+            logger.error("anthropic_stream_error", error=str(e))
+            raise ChatError(f"Anthropic API error: {e}") from e
 
     def is_configured(self) -> bool:
         key = settings.anthropic_api_key
-        return bool(key and key.startswith('sk-ant-'))
+        return bool(key and key.startswith("sk-ant-"))
 
 
 anthropic_client = AnthropicClient()
