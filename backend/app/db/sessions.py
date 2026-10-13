@@ -97,24 +97,34 @@ async def search_chunks(
     source_ids: list[UUID],
     top_k: int = 5,
 ) -> list[dict[str, Any]]:
-    if not source_ids:
-        return []
-
     if not all(math.isfinite(f) for f in embedding):
         raise EmbeddingError("Query embedding contains non-finite values (NaN/Inf)")
 
     pool = get_pool()
-    rows = await pool.fetch(
-        """
-        SELECT url, title, content,
-               1 - (embedding <=> $1::vector) AS score
-        FROM chunks
-        WHERE source_id = ANY($2::uuid[])
-        ORDER BY embedding <=> $1::vector
-        LIMIT $3
-        """,
-        _fmt_embedding(embedding),
-        source_ids,
-        top_k,
-    )
+    if source_ids:
+        rows = await pool.fetch(
+            """
+            SELECT url, title, content,
+                   1 - (embedding <=> $1::vector) AS score
+            FROM chunks
+            WHERE source_id = ANY($2::uuid[])
+            ORDER BY embedding <=> $1::vector
+            LIMIT $3
+            """,
+            _fmt_embedding(embedding),
+            source_ids,
+            top_k,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT url, title, content,
+                   1 - (embedding <=> $1::vector) AS score
+            FROM chunks
+            ORDER BY embedding <=> $1::vector
+            LIMIT $2
+            """,
+            _fmt_embedding(embedding),
+            top_k,
+        )
     return [dict(row) for row in rows]

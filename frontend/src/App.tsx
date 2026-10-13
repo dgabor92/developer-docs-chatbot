@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Session } from './types/session'
 import { createSession, deleteSession, listSessions } from './api/sessions'
+import { apiFetch } from './api/client'
 import { SessionSidebar } from './components/SessionSidebar'
 import { ChatWindow } from './components/ChatWindow'
 import { SourcesPanel } from './components/SourcesPanel'
@@ -41,7 +42,9 @@ export default function App() {
   }, [loadSessions])
 
   async function handleNewSession() {
-    const session = await createSession([])
+    const allSources = await apiFetch<{ id: string; status: string }[]>('/sources')
+    const readyIds = allSources.filter(s => s.status === 'ready').map(s => s.id)
+    const session = await createSession(readyIds)
     setSessions(prev => [session, ...prev])
     setSelectedId(session.id)
     setView('chat')

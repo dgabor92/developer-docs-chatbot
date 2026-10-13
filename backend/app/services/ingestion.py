@@ -148,15 +148,17 @@ class PageScraper:
 
         content = main.get_text(separator="\n", strip=True)
 
-        # Remove short UI-chrome lines (button labels, single nav items like "Copy", "Share")
-        # Keep empty lines for paragraph spacing; keep lines with 3+ words (real sentences)
-        # or lines that look like code (contain punctuation typical of code)
+        # Remove short UI-chrome lines (button labels, single nav items, bare symbols)
+        # Keep lines with 3+ words, or code-like lines that have at least 2 alphanumeric words
         filtered_lines = []
         for line in content.split("\n"):
             stripped = line.strip()
             if not stripped:
                 filtered_lines.append("")
-            elif len(stripped.split()) >= 3 or any(c in stripped for c in "(){}[];=<>"):
+                continue
+            words = stripped.split()
+            alpha_words = [w for w in words if any(c.isalpha() for c in w)]
+            if len(alpha_words) >= 2:
                 filtered_lines.append(stripped)
         content = "\n".join(filtered_lines)
         content = re.sub(r"\n{3,}", "\n\n", content).strip()

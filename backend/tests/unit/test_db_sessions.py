@@ -169,12 +169,13 @@ async def test_list_messages_returns_dicts() -> None:
 
 # ── search_chunks ─────────────────────────────────────────────────────────────
 
-async def test_search_chunks_empty_source_ids_returns_empty() -> None:
-    pool = _make_pool()
+async def test_search_chunks_empty_source_ids_searches_all() -> None:
+    rows = [{'url': 'https://x.com', 'title': 'X', 'content': 'text', 'score': 0.9}]
+    pool = _make_pool(fetch=rows)
     with patch('app.db.sessions.get_pool', return_value=pool):
         result = await search_chunks([0.1, 0.2], [])
-    assert result == []
-    pool.fetch.assert_not_called()
+    assert len(result) == 1
+    pool.fetch.assert_called_once()
 
 
 async def test_search_chunks_with_source_ids() -> None:

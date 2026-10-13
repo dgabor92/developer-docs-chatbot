@@ -46,7 +46,7 @@ export function SessionSidebar({
                 e.stopPropagation()
                 onDelete(s.id)
               }}
-              className='ml-2 hidden rounded text-gray-400 hover:text-red-500 group-hover:block dark:text-gray-500 dark:hover:text-red-400'
+              className='ml-2 flex-shrink-0 rounded text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400'
               title='Delete session'
             >
               ×
