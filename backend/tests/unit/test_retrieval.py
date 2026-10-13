@@ -58,7 +58,7 @@ async def test_search_passes_source_ids(service: RetrievalService) -> None:
 
         await service.search('query', [source_id], top_k=3)
 
-        mock_search.assert_called_once_with(MOCK_EMBEDDING, [source_id], 3)
+        mock_search.assert_called_once_with(MOCK_EMBEDDING, [source_id], 12)  # top_k * 4
 
 
 @pytest.mark.asyncio
@@ -72,7 +72,7 @@ async def test_search_passes_empty_source_ids(service: RetrievalService) -> None
 
         await service.search('query', [], top_k=5)
 
-        mock_search.assert_called_once_with(MOCK_EMBEDDING, [], 5)
+        mock_search.assert_called_once_with(MOCK_EMBEDDING, [], 20)  # top_k * 4
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@
 
 A RAG-powered chatbot for developer documentation. Index any documentation site by URL and ask questions about it in natural language — with streaming responses, persistent chat history, and source citations.
 
-![Developer Docs Chatbot demo](docs/demo.gif)
+![Developer Docs Chatbot](docs/screenshot.png)
 
 ## Stack
 

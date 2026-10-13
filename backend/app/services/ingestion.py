@@ -147,6 +147,18 @@ class PageScraper:
             return None
 
         content = main.get_text(separator="\n", strip=True)
+
+        # Remove short UI-chrome lines (button labels, single nav items like "Copy", "Share")
+        # Keep empty lines for paragraph spacing; keep lines with 3+ words (real sentences)
+        # or lines that look like code (contain punctuation typical of code)
+        filtered_lines = []
+        for line in content.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                filtered_lines.append("")
+            elif len(stripped.split()) >= 3 or any(c in stripped for c in "(){}[];=<>"):
+                filtered_lines.append(stripped)
+        content = "\n".join(filtered_lines)
         content = re.sub(r"\n{3,}", "\n\n", content).strip()
 
         if len(content) < 100:
@@ -198,7 +210,9 @@ class IngestionService:
             chunk_data: list[tuple[str, str | None, str, list[float]]] = []
             for page in pages:
                 for chunk_text in self._chunker.split(page.content):
-                    embedding = await ollama_client.embed(chunk_text)
+                    # Prepend title so the embedding captures the page topic
+                    embed_text = f"{page.title}\n\n{chunk_text}" if page.title else chunk_text
+                    embedding = await ollama_client.embed(embed_text)
                     chunk_data.append((page.url, page.title, chunk_text, embedding))
 
             # Atomically swap old chunks for new ones — concurrent reindex can't interleave
