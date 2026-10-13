@@ -61,11 +61,29 @@ export function ChatWindow({ sessionId }: Props) {
         )}
 
         {!loadingMessages && messages.length === 0 && !streaming && (
-          <div className='flex h-full flex-col items-center justify-center gap-2 text-center'>
-            <p className='text-base font-medium text-gray-500 dark:text-gray-400'>Ask anything about the docs</p>
-            <p className='text-sm text-gray-400 dark:text-gray-500'>
-              Add a source first, then start chatting
-            </p>
+          <div className='flex h-full flex-col items-center justify-center gap-5 text-center'>
+            <div>
+              <p className='text-base font-medium text-gray-600 dark:text-gray-300'>Ask anything about the docs</p>
+              <p className='mt-1 text-sm text-gray-400 dark:text-gray-500'>
+                Try one of these to get started
+              </p>
+            </div>
+            <div className='flex flex-wrap justify-center gap-2 max-w-lg'>
+              {[
+                'How do I get started?',
+                'Show me a configuration example',
+                'What are the main concepts?',
+                'How does authentication work?',
+              ].map(q => (
+                <button
+                  key={q}
+                  onClick={() => handleSend(q)}
+                  className='rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-indigo-700 dark:hover:bg-indigo-950 dark:hover:text-indigo-400'
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
