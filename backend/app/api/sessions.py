@@ -87,7 +87,7 @@ async def send_message(session_id: UUID, body: MessageCreate) -> StreamingRespon
 
     async def generate() -> AsyncIterator[str]:
         try:
-            async for event, data in chat_service.stream_message(session_id, body.content):
+            async for event, data in chat_service.stream_message(session, body.content):
                 yield _sse_event(event, data)
         except Exception as e:
             logger.error("stream_error", session_id=str(session_id), error=str(e))

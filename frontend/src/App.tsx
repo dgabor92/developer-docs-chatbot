@@ -27,14 +27,20 @@ export default function App() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [view, setView] = useState<View>('chat')
   const [dark, toggleDark] = useDarkMode()
 
   const loadSessions = useCallback(() => {
-    listSessions().then(data => {
-      setSessions(data)
-      setSessionsLoading(false)
-    })
+    listSessions()
+      .then(data => {
+        setSessions(data)
+        setSessionsLoading(false)
+      })
+      .catch(err => {
+        console.error('Failed to load sessions:', err)
+        setSessionsLoading(false)
+      })
   }, [])
 
   useEffect(() => {
@@ -42,12 +48,20 @@ export default function App() {
   }, [loadSessions])
 
   async function handleNewSession() {
-    const allSources = await apiFetch<{ id: string; status: string }[]>('/sources')
-    const readyIds = allSources.filter(s => s.status === 'ready').map(s => s.id)
-    const session = await createSession(readyIds)
-    setSessions(prev => [session, ...prev])
-    setSelectedId(session.id)
-    setView('chat')
+    if (isCreatingSession) return
+    setIsCreatingSession(true)
+    try {
+      const allSources = await apiFetch<{ id: string; status: string }[]>('/sources')
+      const readyIds = allSources.filter(s => s.status === 'ready').map(s => s.id)
+      const session = await createSession(readyIds)
+      setSessions(prev => [session, ...prev])
+      setSelectedId(session.id)
+      setView('chat')
+    } catch (err) {
+      console.error('Failed to create session:', err)
+    } finally {
+      setIsCreatingSession(false)
+    }
   }
 
   async function handleDeleteSession(id: string) {

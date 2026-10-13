@@ -1,11 +1,9 @@
 """Tests for ChatService.stream_message."""
-from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 
-from app.exceptions import NotFoundError
 from app.services.chat import ChatService
 from app.services.retrieval import ChunkResult
 
@@ -28,13 +26,6 @@ async def _collect_stream(gen):
 
 
 class TestStreamMessage:
-    async def test_raises_not_found_when_session_missing(self) -> None:
-        service = ChatService()
-        with patch('app.services.chat.get_session', AsyncMock(return_value=None)):
-            with pytest.raises(NotFoundError):
-                async for _ in service.stream_message(uuid4(), 'hello'):
-                    pass
-
     async def test_yields_tokens_sources_done(self) -> None:
         service = ChatService()
         sess_id = uuid4()
@@ -48,7 +39,6 @@ class TestStreamMessage:
             yield 'world'
 
         with (
-            patch('app.services.chat.get_session', AsyncMock(return_value=session)),
             patch('app.services.chat.create_message', AsyncMock(side_effect=[user_msg, asst_msg])),
             patch('app.services.chat.list_messages', AsyncMock(return_value=[])),
             patch('app.services.chat.update_session_title', AsyncMock()),
@@ -58,7 +48,7 @@ class TestStreamMessage:
             mock_ret.search = AsyncMock(return_value=[chunk])
             mock_ant.stream = fake_stream
 
-            events = await _collect_stream(service.stream_message(sess_id, 'hello'))
+            events = await _collect_stream(service.stream_message(session, 'hello'))
 
         event_types = [e for e, _ in events]
         assert 'token' in event_types
@@ -80,7 +70,6 @@ class TestStreamMessage:
             raise RuntimeError('network error')
 
         with (
-            patch('app.services.chat.get_session', AsyncMock(return_value=session)),
             patch('app.services.chat.create_message', AsyncMock(return_value=user_msg)),
             patch('app.services.chat.delete_message', AsyncMock()) as mock_delete,
             patch('app.services.chat.list_messages', AsyncMock(return_value=[])),
@@ -91,7 +80,7 @@ class TestStreamMessage:
             mock_ant.stream = exploding_stream
 
             with pytest.raises(RuntimeError, match='network error'):
-                async for _ in service.stream_message(sess_id, 'hello'):
+                async for _ in service.stream_message(session, 'hello'):
                     pass
 
         mock_delete.assert_called_once_with(user_msg['id'])
@@ -107,7 +96,6 @@ class TestStreamMessage:
             yield 'ok'
 
         with (
-            patch('app.services.chat.get_session', AsyncMock(return_value=session)),
             patch('app.services.chat.create_message', AsyncMock(side_effect=[user_msg, asst_msg])),
             patch('app.services.chat.list_messages', AsyncMock(return_value=[])),
             patch('app.services.chat.update_session_title', AsyncMock()) as mock_title,
@@ -117,7 +105,7 @@ class TestStreamMessage:
             mock_ret.search = AsyncMock(return_value=[])
             mock_ant.stream = fake_stream
 
-            await _collect_stream(service.stream_message(sess_id, 'my question'))
+            await _collect_stream(service.stream_message(session, 'my question'))
 
         mock_title.assert_called_once()
         assert mock_title.call_args[0][1] == 'my question'
@@ -133,7 +121,6 @@ class TestStreamMessage:
             yield 'response'
 
         with (
-            patch('app.services.chat.get_session', AsyncMock(return_value=session)),
             patch('app.services.chat.create_message', AsyncMock(side_effect=[user_msg, asst_msg])),
             patch('app.services.chat.list_messages', AsyncMock(return_value=[])),
             patch('app.services.chat.update_session_title', AsyncMock()) as mock_title,
@@ -143,6 +130,6 @@ class TestStreamMessage:
             mock_ret.search = AsyncMock(return_value=[])
             mock_ant.stream = fake_stream
 
-            await _collect_stream(service.stream_message(sess_id, 'question'))
+            await _collect_stream(service.stream_message(session, 'question'))
 
         mock_title.assert_not_called()

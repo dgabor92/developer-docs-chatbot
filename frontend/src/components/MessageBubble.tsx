@@ -54,7 +54,7 @@ function SourcesList({ sources }: { sources: SourceCitation[] }) {
       {sources.map((s, i) => (
         <a
           key={i}
-          href={s.url}
+          href={s.url.startsWith('http://') || s.url.startsWith('https://') ? s.url : '#'}
           target='_blank'
           rel='noopener noreferrer'
           className='inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-400 dark:hover:border-indigo-800'

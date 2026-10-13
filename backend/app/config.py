@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # App
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    api_key: str = ""
     log_level: str = "INFO"
     environment: str = "development"
 

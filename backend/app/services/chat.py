@@ -8,11 +8,9 @@ from app.clients.anthropic import anthropic_client
 from app.db.sessions import (
     create_message,
     delete_message,
-    get_session,
     list_messages,
     update_session_title,
 )
-from app.exceptions import NotFoundError
 from app.services.retrieval import ChunkResult, retrieval_service
 
 logger = structlog.get_logger()
@@ -56,13 +54,10 @@ def _truncate_history(
 class ChatService:
     async def stream_message(
         self,
-        session_id: UUID,
+        session: dict[str, Any],
         content: str,
     ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
-        session = await get_session(session_id)
-        if session is None:
-            raise NotFoundError("session", str(session_id))
-
+        session_id: UUID = session["id"]
         source_ids = list(session["source_ids"] or [])
 
         user_msg = await create_message(session_id, "user", content)

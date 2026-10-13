@@ -158,7 +158,7 @@ class PageScraper:
                 continue
             words = stripped.split()
             alpha_words = [w for w in words if any(c.isalpha() for c in w)]
-            if len(alpha_words) >= 2:
+            if len(alpha_words) >= 1:
                 filtered_lines.append(stripped)
         content = "\n".join(filtered_lines)
         content = re.sub(r"\n{3,}", "\n\n", content).strip()
@@ -310,7 +310,7 @@ class IngestionService:
                     pages.append(page)
                     logger.info("page_indexed", url=current_url, chars=len(page.content))
 
-                new_links = self._scraper.extract_links(base_url, response.text)
+                new_links = self._scraper.extract_links(current_url, response.text)
                 for link in new_links:
                     if link not in visited and link not in queued:
                         queued.add(link)
