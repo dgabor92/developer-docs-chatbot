@@ -20,6 +20,7 @@ MAX_PAGES = 50
 CHUNK_SIZE = 2000  # ~500 tokens at ~4 chars/token
 CHUNK_OVERLAP = 200  # ~50 tokens
 CRAWL_DELAY = 0.15  # seconds between requests
+MIN_CONTENT_LEN = 500  # below this threshold, fall back to Playwright
 
 _USER_AGENT = "Mozilla/5.0 (compatible; developer-docs-chatbot/1.0)"
 
@@ -88,7 +89,39 @@ class PageScraper:
             logger.warning("page_fetch_failed", url=url, error=str(e))
             return None
 
-        return self._parse(url, response.text)
+        page = self._parse(url, response.text)
+        if page and len(page.content) >= MIN_CONTENT_LEN:
+            return page
+
+        # Static HTML yielded too little content — JS-rendered page, use Playwright
+        logger.info("playwright_fallback", url=url)
+        html = await self._playwright_fetch_html(url)
+        if html is None:
+            return page  # return the sparse static result rather than nothing
+        return self._parse(url, html) or page
+
+    @staticmethod
+    async def _playwright_fetch_html(url: str) -> str | None:
+        try:
+            from playwright.async_api import async_playwright  # lazy import
+        except ImportError:
+            logger.warning("playwright_not_installed")
+            return None
+        try:
+            async with async_playwright() as pw:
+                browser = await pw.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                )
+                ctx = await browser.new_context(user_agent=_USER_AGENT)
+                page = await ctx.new_page()
+                await page.goto(url, wait_until="networkidle", timeout=30_000)
+                html = await page.content()
+                await browser.close()
+                return html
+        except Exception as e:
+            logger.warning("playwright_fetch_failed", url=url, error=str(e))
+            return None
 
     def _parse(self, url: str, html: str) -> ScrapedPage | None:
         soup = BeautifulSoup(html, "html.parser")

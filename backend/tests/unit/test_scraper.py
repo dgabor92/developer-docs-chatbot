@@ -12,9 +12,16 @@ FULL_PAGE_HTML = """
   <header><nav>Navigation links here</nav></header>
   <main>
     <h1>Installation</h1>
-    <p>Install Tailwind CSS via npm to get started with the framework.</p>
-    <p>Run the following command to install:</p>
-    <pre><code>npm install tailwindcss</code></pre>
+    <p>Install Tailwind CSS via npm to get started with the framework. This is a comprehensive
+    guide to setting up Tailwind CSS in your project from scratch. The installation process
+    is straightforward and takes only a few minutes to complete.</p>
+    <p>Run the following command to install the Tailwind CSS package and its peer dependencies
+    into your project. Make sure you have Node.js version 14 or higher installed on your
+    system before proceeding with the installation steps below.</p>
+    <pre><code>npm install tailwindcss postcss autoprefixer</code></pre>
+    <p>After installation, create your configuration file by running the init command. This
+    generates a tailwind.config.js file at the root of your project where you can customize
+    the design system including colors, spacing, typography, and more.</p>
   </main>
   <aside>Related articles</aside>
   <footer>Copyright notice and links</footer>
@@ -122,12 +129,46 @@ async def test_scrape_page_success(scraper: PageScraper) -> None:
     assert page.title == 'Installation'
 
 
-async def test_scrape_page_http_error_returns_none(scraper: PageScraper) -> None:
+async def test_scrape_page_http_error_returns_none(scraper: PageScraper, monkeypatch: pytest.MonkeyPatch) -> None:
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(side_effect=httpx.HTTPError('connection timeout'))
+    monkeypatch.setattr(PageScraper, '_playwright_fetch_html', AsyncMock(return_value=None))
 
     page = await scraper.scrape_page('https://example.com/docs', mock_client)
     assert page is None
+
+
+async def test_scrape_page_falls_back_to_playwright_for_sparse_content(
+    scraper: PageScraper, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sparse_html = '<html><body><main><p>Too short.</p></main></body></html>'
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.text = sparse_html
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    monkeypatch.setattr(PageScraper, '_playwright_fetch_html', AsyncMock(return_value=FULL_PAGE_HTML))
+
+    page = await scraper.scrape_page('https://example.com/docs', mock_client)
+    assert page is not None
+    assert page.title == 'Installation'
+
+
+async def test_scrape_page_returns_sparse_page_when_playwright_unavailable(
+    scraper: PageScraper, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sparse_html = '<html><body><main>' + ('x ' * 60) + '</main></body></html>'
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.text = sparse_html
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    monkeypatch.setattr(PageScraper, '_playwright_fetch_html', AsyncMock(return_value=None))
+
+    page = await scraper.scrape_page('https://example.com/docs', mock_client)
+    assert page is not None  # returns sparse result rather than None
 
 
 # ── _parse edge branches ──────────────────────────────────────────────────────
