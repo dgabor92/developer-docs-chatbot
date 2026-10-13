@@ -130,7 +130,14 @@ _CRAWL_HTML = """
 <body>
   <main>
     <h1>Getting Started</h1>
-    <p>Welcome to the documentation. This is a long enough paragraph to pass the minimum content threshold required by the scraper for extraction.</p>
+    <p>Welcome to the documentation. This guide covers everything you need to know to get started
+    with the framework. The installation process is straightforward and takes only a few minutes
+    to complete on any supported platform including macOS, Linux, and Windows.</p>
+    <p>After installation you can create your first project by running the init command. This
+    generates the necessary configuration files at the root of your project directory where you
+    can customize all aspects of the framework behavior including routing, state management,
+    styling, and build optimizations. The configuration system is designed to be intuitive and
+    well-documented so that developers of all experience levels can get productive quickly.</p>
   </main>
 </body>
 </html>

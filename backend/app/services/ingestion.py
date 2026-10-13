@@ -285,6 +285,11 @@ class IngestionService:
                     continue
 
                 page = self._scraper._parse(current_url, response.text)
+                if page is None or len(page.content) < MIN_CONTENT_LEN:
+                    logger.info("playwright_fallback", url=current_url)
+                    pw_html = await PageScraper._playwright_fetch_html(current_url)
+                    if pw_html:
+                        page = self._scraper._parse(current_url, pw_html) or page
                 if page:
                     pages.append(page)
                     logger.info("page_indexed", url=current_url, chars=len(page.content))
