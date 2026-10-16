@@ -4,6 +4,18 @@ A RAG-powered chatbot for developer documentation. Index any documentation site 
 
 ![Developer Docs Chatbot](docs/screenshot.png)
 
+## Features
+
+- **SSE streaming** — real-time token-by-token response rendering via Server-Sent Events
+- **Multi-turn conversations** — persistent session history with full context carry-over
+- **Source citations** — every answer links back to the exact documentation page it used
+- **Dark mode** — full dark/light theme support
+- **Web scraper + chunker** — index any documentation site by URL, auto-chunked with overlap
+- **pgvector semantic search** — cosine similarity retrieval over nomic-embed-text embeddings
+- **SSRF protection** — internal network URLs blocked at ingestion time
+- **X-Api-Key auth** — API key authentication on all endpoints
+- **156 tests** — 99% frontend coverage (Vitest) + full backend suite (Pytest)
+
 ## Stack
 
 | Layer | Technology |
@@ -102,4 +114,4 @@ This project is the **6th phase** of the AI Engineering learning path.
 | 3 | RAG pipeline | Done |
 | 4 | FastAPI + pgvector RAG demo | Done |
 | 5 | LLM evaluation (RAGAS) | Done |
-| 6 | **Developer Docs Chatbot** | **In progress** |
+| 6 | **Developer Docs Chatbot** | **Done** |
